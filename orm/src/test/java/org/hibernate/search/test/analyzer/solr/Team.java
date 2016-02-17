@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.analyzer.solr;
 
@@ -27,24 +10,23 @@ import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.Id;
 
-import org.apache.solr.analysis.HTMLStripCharFilterFactory;
-import org.apache.solr.analysis.ASCIIFoldingFilterFactory;
-import org.apache.solr.analysis.LengthFilterFactory;
-import org.apache.solr.analysis.LowerCaseFilterFactory;
-import org.apache.solr.analysis.LowerCaseTokenizerFactory;
-import org.apache.solr.analysis.MappingCharFilterFactory;
-import org.apache.solr.analysis.PorterStemFilterFactory;
-import org.apache.solr.analysis.ShingleFilterFactory;
-import org.apache.solr.analysis.SnowballPorterFilterFactory;
-import org.apache.solr.analysis.StandardFilterFactory;
-import org.apache.solr.analysis.StandardTokenizerFactory;
-import org.apache.solr.analysis.StopFilterFactory;
-import org.apache.solr.analysis.SynonymFilterFactory;
-import org.apache.solr.analysis.TrimFilterFactory;
-import org.apache.solr.analysis.WordDelimiterFilterFactory;
-import org.apache.solr.analysis.PhoneticFilterFactory;
-import org.apache.solr.analysis.PatternTokenizerFactory;
-
+import org.apache.lucene.analysis.charfilter.HTMLStripCharFilterFactory;
+import org.apache.lucene.analysis.charfilter.MappingCharFilterFactory;
+import org.apache.lucene.analysis.core.LowerCaseFilterFactory;
+import org.apache.lucene.analysis.core.LowerCaseTokenizerFactory;
+import org.apache.lucene.analysis.core.StopFilterFactory;
+import org.apache.lucene.analysis.en.PorterStemFilterFactory;
+import org.apache.lucene.analysis.miscellaneous.ASCIIFoldingFilterFactory;
+import org.apache.lucene.analysis.miscellaneous.LengthFilterFactory;
+import org.apache.lucene.analysis.miscellaneous.TrimFilterFactory;
+import org.apache.lucene.analysis.miscellaneous.WordDelimiterFilterFactory;
+import org.apache.lucene.analysis.pattern.PatternTokenizerFactory;
+import org.apache.lucene.analysis.phonetic.PhoneticFilterFactory;
+import org.apache.lucene.analysis.shingle.ShingleFilterFactory;
+import org.apache.lucene.analysis.snowball.SnowballPorterFilterFactory;
+import org.apache.lucene.analysis.standard.StandardFilterFactory;
+import org.apache.lucene.analysis.standard.StandardTokenizerFactory;
+import org.apache.lucene.analysis.synonym.SynonymFilterFactory;
 import org.hibernate.search.annotations.Analyzer;
 import org.hibernate.search.annotations.AnalyzerDef;
 import org.hibernate.search.annotations.AnalyzerDefs;
@@ -69,8 +51,7 @@ import org.hibernate.search.annotations.TokenizerDef;
 						@TokenFilterDef(factory = LowerCaseFilterFactory.class),
 						@TokenFilterDef(factory = StopFilterFactory.class, params = {
 								@Parameter(name = "words",
-										value = "org/hibernate/search/test/analyzer/solr/stoplist.properties"),
-								@Parameter(name = "resource_charset", value = "UTF-8"),
+										value = "org/hibernate/search/test/analyzer/stoplist.properties"),
 								@Parameter(name = "ignoreCase", value = "true")
 						}),
 						@TokenFilterDef(factory = SnowballPorterFilterFactory.class, params = {
@@ -143,8 +124,11 @@ import org.hibernate.search.annotations.TokenizerDef;
 				tokenizer = @TokenizerDef(factory = StandardTokenizerFactory.class),
 				filters = {
 						@TokenFilterDef(factory = SynonymFilterFactory.class, params = {
-								@Parameter(name = "synonyms",
-										value = "org/hibernate/search/test/analyzer/solr/synonyms.properties")
+								@Parameter(
+										name = "synonyms",
+										value = "org/hibernate/search/test/analyzer/synonyms.properties"
+								),
+								@Parameter(name = "expand", value = "false")
 						})
 				}),
 
@@ -176,7 +160,7 @@ import org.hibernate.search.annotations.TokenizerDef;
 		@AnalyzerDef(name = "mapping_char_analyzer",
 				charFilters = {
 						@CharFilterDef(factory = MappingCharFilterFactory.class, params = {
-								@Parameter(name = "mapping", value = "org/hibernate/search/test/analyzer/solr/mapping-chars.properties")
+								@Parameter(name = "mapping", value = "org/hibernate/search/test/analyzer/mapping-chars.properties")
 						})
 				},
 				tokenizer = @TokenizerDef(factory = StandardTokenizerFactory.class)

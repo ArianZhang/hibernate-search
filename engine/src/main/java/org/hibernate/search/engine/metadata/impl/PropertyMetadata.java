@@ -1,84 +1,105 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2013, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.engine.metadata.impl;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 import org.hibernate.annotations.common.reflection.XProperty;
-import org.hibernate.search.annotations.NumericField;
 import org.hibernate.search.engine.BoostStrategy;
 import org.hibernate.search.engine.impl.DefaultBoostStrategy;
 import org.hibernate.search.util.impl.ReflectionHelper;
 
 /**
- * Encapsulating the metadata for a single indexed property annotated with {@code Field}.
+ * Encapsulating the metadata for a single indexed property (field or getter).
+ *
+ * Each field or getter can have multiple document fields (via {@code @Fields}).
  *
  * @author Hardy Ferentschik
  */
 public class PropertyMetadata {
-	private final XProperty propertyGetter;
-	private final DocumentFieldMetadata fieldMetadata;
+	private final XProperty propertyAccessor;
+	private final Map<String, DocumentFieldMetadata> documentFieldMetadataMap;
+	private final Set<DocumentFieldMetadata> documentFieldMetadataList;
+	private final Set<SortableFieldMetadata> sortableFieldMetadata;
 	private final BoostStrategy dynamicBoostStrategy;
-	private final Integer precisionStep;
-	private final String nullToken;
+	private final String propertyAccessorName;
+
+	/**
+	 * Fields explicitly declared by {@link org.hibernate.search.bridge.MetadataProvidingFieldBridge}s.
+	 * <p>
+	 * Note: This is only to be used for validation / schema creation in ES, don't use it to drive invocation of field
+	 * bridges at indexing time!
+	 */
+	private final Map<String, BridgeDefinedField> bridgeDefinedFields;
 
 	private PropertyMetadata(Builder builder) {
-		this.propertyGetter = builder.propertyGetter;
-		this.fieldMetadata = builder.fieldMetadata;
-		this.nullToken = builder.nullToken;
-
+		this.propertyAccessor = builder.propertyAccessor;
+		this.documentFieldMetadataList = Collections.unmodifiableSet( builder.fieldMetadataSet );
+		this.documentFieldMetadataMap = createDocumentFieldMetadataMap( builder.fieldMetadataSet );
+		this.sortableFieldMetadata = Collections.unmodifiableSet( builder.sortableFieldMetadata );
+		this.bridgeDefinedFields = Collections.unmodifiableMap( builder.bridgeDefinedFields );
+		this.propertyAccessorName = propertyAccessor == null ? null : propertyAccessor.getName();
 		if ( builder.dynamicBoostStrategy != null ) {
 			this.dynamicBoostStrategy = builder.dynamicBoostStrategy;
 		}
 		else {
 			this.dynamicBoostStrategy = DefaultBoostStrategy.INSTANCE;
 		}
+	}
 
-		if ( builder.precisionStep == null ) {
-			this.precisionStep = NumericField.PRECISION_STEP_DEFAULT;
+	private Map<String, DocumentFieldMetadata> createDocumentFieldMetadataMap(Set<DocumentFieldMetadata> fieldMetadataSet) {
+		Map<String, DocumentFieldMetadata> tmpMap = new HashMap<>();
+		for ( DocumentFieldMetadata documentFieldMetadata : fieldMetadataSet ) {
+			tmpMap.put( documentFieldMetadata.getName(), documentFieldMetadata );
 		}
-		else {
-			this.precisionStep = builder.precisionStep;
-		}
+		return Collections.unmodifiableMap( tmpMap );
 	}
 
-	public XProperty getPropertyGetter() {
-		return propertyGetter;
+	public XProperty getPropertyAccessor() {
+		return propertyAccessor;
 	}
 
-	public String getPropertyGetterName() {
-		return propertyGetter == null ? null : propertyGetter.getName();
+	public String getPropertyAccessorName() {
+		return propertyAccessorName;
 	}
 
-	public Integer getPrecisionStep() {
-		return precisionStep;
+	/**
+	 * @deprecated use getFieldMetadataSet() instead
+	 */
+	@Deprecated
+	public List<DocumentFieldMetadata> getFieldMetadata() {
+		return new ArrayList<DocumentFieldMetadata>( documentFieldMetadataList );
 	}
 
-	public String getNullToken() {
-		return nullToken;
+	public Set<DocumentFieldMetadata> getFieldMetadataSet() {
+		return documentFieldMetadataList;
 	}
 
-	public DocumentFieldMetadata getFieldMetadata() {
-		return fieldMetadata;
+	public DocumentFieldMetadata getFieldMetadata(String fieldName) {
+		return documentFieldMetadataMap.get( fieldName );
+	}
+
+	/**
+	 * Accessor to the metadata of the sortable fields.
+	 *
+	 * @return the sortable fields defined for this property.
+	 */
+	public Set<SortableFieldMetadata> getSortableFieldMetadata() {
+		return sortableFieldMetadata;
+	}
+
+	public Map<String, BridgeDefinedField> getBridgeDefinedFields() {
+		return bridgeDefinedFields;
 	}
 
 	public BoostStrategy getDynamicBoostStrategy() {
@@ -87,20 +108,22 @@ public class PropertyMetadata {
 
 	public static class Builder {
 		// required parameters
-		private final XProperty propertyGetter;
-		private final DocumentFieldMetadata fieldMetadata;
+		private final XProperty propertyAccessor;
+		private final Set<DocumentFieldMetadata> fieldMetadataSet;
+		private final Set<SortableFieldMetadata> sortableFieldMetadata;
+		private final Map<String, BridgeDefinedField> bridgeDefinedFields;
 
 		// optional parameters
 		private BoostStrategy dynamicBoostStrategy;
-		private Integer precisionStep;
-		private String nullToken;
 
-		public Builder(XProperty propertyGetter, DocumentFieldMetadata fieldMetadata) {
-			if ( propertyGetter != null ) {
-				ReflectionHelper.setAccessible( propertyGetter );
+		public Builder(XProperty propertyAccessor) {
+			if ( propertyAccessor != null ) {
+				ReflectionHelper.setAccessible( propertyAccessor );
 			}
-			this.propertyGetter = propertyGetter;
-			this.fieldMetadata = fieldMetadata;
+			this.propertyAccessor = propertyAccessor;
+			this.fieldMetadataSet = new HashSet<>();
+			this.sortableFieldMetadata = new HashSet<>();
+			this.bridgeDefinedFields = new HashMap<>();
 		}
 
 		public Builder dynamicBoostStrategy(BoostStrategy boostStrategy) {
@@ -108,14 +131,27 @@ public class PropertyMetadata {
 			return this;
 		}
 
-		public Builder precisionStep(Integer precisionStep) {
-			this.precisionStep = precisionStep;
+		public Builder addDocumentField(DocumentFieldMetadata documentFieldMetadata) {
+			this.fieldMetadataSet.add( documentFieldMetadata );
 			return this;
 		}
 
-		public Builder indexNullAs(String nullToken) {
-			this.nullToken = nullToken;
+		public Builder addSortableField(SortableFieldMetadata sortableField) {
+			this.sortableFieldMetadata.add( sortableField );
 			return this;
+		}
+
+		public Builder addBridgeDefinedField(BridgeDefinedField bridgeDefinedField) {
+			this.bridgeDefinedFields.put( bridgeDefinedField.getName(), bridgeDefinedField );
+			return this;
+		}
+
+		public XProperty getPropertyAccessor() {
+			return propertyAccessor;
+		}
+
+		public Set<DocumentFieldMetadata> getFieldMetadata() {
+			return fieldMetadataSet;
 		}
 
 		public PropertyMetadata build() {
@@ -125,15 +161,9 @@ public class PropertyMetadata {
 
 	@Override
 	public String toString() {
-		final StringBuilder sb = new StringBuilder( "PropertyMetadata{" );
-		sb.append( "propertyGetter=" ).append( propertyGetter );
-		sb.append( ", fieldMetadata=" ).append( fieldMetadata );
-		sb.append( ", dynamicBoostStrategy=" ).append( dynamicBoostStrategy );
-		sb.append( ", precisionStep=" ).append( precisionStep );
-		sb.append( ", nullToken='" ).append( nullToken ).append( '\'' );
-		sb.append( '}' );
-		return sb.toString();
+		return "PropertyMetadata{"
+				+ "propertyAccessor=" + propertyAccessor
+				+ ", fieldMetadata=" + documentFieldMetadataList
+				+ ", dynamicBoostStrategy=" + dynamicBoostStrategy + '}';
 	}
 }
-
-

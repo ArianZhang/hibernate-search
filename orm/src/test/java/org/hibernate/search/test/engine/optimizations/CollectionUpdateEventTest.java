@@ -1,20 +1,8 @@
 /*
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
+ * Hibernate Search, full-text search for your domain model
  *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.test.engine.optimizations;
@@ -27,15 +15,17 @@ import org.hibernate.collection.internal.PersistentBag;
 import org.hibernate.collection.internal.PersistentSet;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.cfg.EntityMapping;
+import org.hibernate.search.cfg.IndexedMapping;
 import org.hibernate.search.cfg.SearchMapping;
 import org.hibernate.search.test.util.FullTextSessionBuilder;
+import org.hibernate.search.testsupport.TestForIssue;
 import org.junit.Test;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
- * HSEARCH-679 - verify that updates to collections that are not indexed do not trigger indexing.
+ * Verify that updates to collections that are not indexed do not trigger indexing.
  * Updating a collection in an entity which is not indexed, but has some other property marked
  * as containedIn, should generally not trigger indexing of the containedIn objects, unless
  * we can't tell for sure the index state is not going to be affected.
@@ -43,7 +33,14 @@ import static org.junit.Assert.assertTrue;
  * @author Sanne Grinovero
  * @author Tom Waterhouse
  */
+@TestForIssue(jiraKey = "HSEARCH-679")
 public class CollectionUpdateEventTest {
+
+	private static boolean WITH_CLASS_BRIDGE_ON_ITEM = true;
+	private static boolean WITHOUT_CLASS_BRIDGE_ON_ITEM = false;
+
+	private static boolean WITH_CLASS_BRIDGE_ON_CATALOG = true;
+	private static boolean WITHOUT_CLASS_BRIDGE_ON_CATALOG = false;
 
 	/**
 	 * If the top level class has a class bridge or dynamic boost, then we can't safely
@@ -51,7 +48,7 @@ public class CollectionUpdateEventTest {
 	 */
 	@Test
 	public void testWithClassBridge() {
-		testScenario( true, 2, false );
+		testScenario( WITH_CLASS_BRIDGE_ON_ITEM, 2, WITHOUT_CLASS_BRIDGE_ON_CATALOG );
 	}
 
 	/**
@@ -59,7 +56,7 @@ public class CollectionUpdateEventTest {
 	 */
 	@Test
 	public void testWithoutClassBridge() {
-		testScenario( false, 2, false );
+		testScenario( WITHOUT_CLASS_BRIDGE_ON_ITEM, 2, WITHOUT_CLASS_BRIDGE_ON_CATALOG );
 	}
 
 	/**
@@ -68,7 +65,7 @@ public class CollectionUpdateEventTest {
 	 */
 	@Test
 	public void testWithNoEnoughDepth() {
-		testScenario( true, 1, false );
+		testScenario( WITH_CLASS_BRIDGE_ON_ITEM, 1, WITHOUT_CLASS_BRIDGE_ON_CATALOG );
 	}
 
 	/**
@@ -77,14 +74,14 @@ public class CollectionUpdateEventTest {
 	 */
 	@Test
 	public void testWithDeepClassBridge() {
-		testScenario( false, 1, true );
+		testScenario( WITHOUT_CLASS_BRIDGE_ON_ITEM, 1, WITH_CLASS_BRIDGE_ON_CATALOG );
 	}
 
-	private void testScenario(boolean usingClassBridge, int depth, boolean usingClassBridgeOnEmbedded) {
-		FullTextSessionBuilder fulltextSessionBuilder = createSearchFactory(
-				usingClassBridge,
+	private void testScenario(boolean withClassBridgeOnItem, int depth, boolean withClassBridgeOnCatalog) {
+		FullTextSessionBuilder fulltextSessionBuilder = configure(
+				withClassBridgeOnItem,
 				depth,
-				usingClassBridgeOnEmbedded
+				withClassBridgeOnCatalog
 		);
 		try {
 			initializeData( fulltextSessionBuilder );
@@ -99,7 +96,7 @@ public class CollectionUpdateEventTest {
 
 				updateCatalogsCollection( fullTextSession, catalog );
 
-				if ( ( usingClassBridge || usingClassBridgeOnEmbedded ) && depth > 1 ) {
+				if ( ( withClassBridgeOnItem || withClassBridgeOnCatalog ) && depth > 1 ) {
 					assertTrue( "catalogItems should have been initialized", catalogItems.wasInitialized() );
 				}
 				else {
@@ -115,36 +112,35 @@ public class CollectionUpdateEventTest {
 		}
 	}
 
-	private FullTextSessionBuilder createSearchFactory(boolean defineClassBridge, int depth, boolean usingClassBridgeOnEmbedded) {
+	private FullTextSessionBuilder configure(boolean withClassBridgeOnItem, int depth, boolean withClassBridgeOnCatalog) {
 		FullTextSessionBuilder builder = new FullTextSessionBuilder()
 				.addAnnotatedClass( Catalog.class )
 				.addAnnotatedClass( CatalogItem.class )
 				.addAnnotatedClass( Consumer.class )
 				.addAnnotatedClass( Item.class );
 		SearchMapping fluentMapping = builder.fluentMapping();
+		// mapping for Catalog
 		EntityMapping catalogMapping = fluentMapping
 				.entity( Catalog.class );
-		if ( usingClassBridgeOnEmbedded ) {
-			catalogMapping.classBridge( ItemClassBridge.class );
+		if ( withClassBridgeOnCatalog ) {
+			catalogMapping.classBridge( NoopClassBridge.class );
 		}
 		catalogMapping
-				.property( "catalogItems", ElementType.FIELD ).containedIn()
-				.entity( CatalogItem.class )
+				.property( "catalogItems", ElementType.FIELD ).containedIn();
+
+		// mapping for CatalogItem
+		fluentMapping.entity( CatalogItem.class )
 				.property( "item", ElementType.FIELD ).containedIn()
 				.property( "catalog", ElementType.FIELD ).indexEmbedded();
-		if ( defineClassBridge ) {
-			fluentMapping
-					.entity( Item.class )
-					.classBridge( ItemClassBridge.class )
-					.indexed()
-					.property( "catalogItems", ElementType.FIELD ).indexEmbedded().depth( depth );
+
+		// mapping for Item
+		IndexedMapping itemMapping = fluentMapping
+				.entity( Item.class )
+				.indexed();
+		if ( withClassBridgeOnItem ) {
+			itemMapping.classBridge( NoopClassBridge.class );
 		}
-		else {
-			fluentMapping
-					.entity( Item.class )
-					.indexed()
-					.property( "catalogItems", ElementType.FIELD ).indexEmbedded().depth( depth );
-		}
+		itemMapping.property( "catalogItems", ElementType.FIELD ).indexEmbedded().depth( depth );
 		return builder.build();
 	}
 

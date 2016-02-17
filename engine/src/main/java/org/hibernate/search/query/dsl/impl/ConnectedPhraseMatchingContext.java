@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.query.dsl.impl;
@@ -50,20 +33,23 @@ public class ConnectedPhraseMatchingContext implements PhraseMatchingContext {
 		this.queryCustomizer = queryCustomizer;
 		this.phraseContext = phraseContext;
 		this.fieldContexts = new ArrayList<FieldContext>(4);
-		this.fieldContexts.add( new FieldContext( fieldName ) );
+		this.fieldContexts.add( new FieldContext( fieldName, queryContext ) );
 	}
 
+	@Override
 	public PhraseMatchingContext andField(String field) {
-		this.fieldContexts.add( new FieldContext( field ) );
+		this.fieldContexts.add( new FieldContext( field, queryContext ) );
 		this.firstOfContext = fieldContexts.size() - 1;
 		return this;
 	}
 
+	@Override
 	public PhraseTermination sentence(String sentence) {
 		phraseContext.setSentence( sentence );
 		return new ConnectedMultiFieldsPhraseQueryBuilder( phraseContext, queryCustomizer, fieldContexts, queryContext );
 	}
 
+	@Override
 	public PhraseMatchingContext boostedTo(float boost) {
 		for ( FieldContext fieldContext : getCurrentFieldContexts() ) {
 			fieldContext.getFieldCustomizer().boostedTo( boost );
@@ -75,6 +61,7 @@ public class ConnectedPhraseMatchingContext implements PhraseMatchingContext {
 		return fieldContexts.subList( firstOfContext, fieldContexts.size() );
 	}
 
+	@Override
 	public PhraseMatchingContext ignoreAnalyzer() {
 		for ( FieldContext fieldContext : getCurrentFieldContexts() ) {
 			fieldContext.setIgnoreAnalyzer( true );
@@ -82,6 +69,7 @@ public class ConnectedPhraseMatchingContext implements PhraseMatchingContext {
 		return this;
 	}
 
+	@Override
 	public PhraseMatchingContext ignoreFieldBridge() {
 		//this is a no-op
 		return this;

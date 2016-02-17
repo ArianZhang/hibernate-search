@@ -1,43 +1,28 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.analyzer.inheritance;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.Token;
-import org.apache.lucene.queryParser.QueryParser;
+import org.apache.lucene.queryparser.classic.QueryParser;
 
 import org.hibernate.Transaction;
+
 import org.hibernate.search.FullTextQuery;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.test.SearchTestCase;
-import org.hibernate.search.test.TestConstants;
+import org.hibernate.search.test.SearchTestBase;
 import org.hibernate.search.util.AnalyzerUtils;
 import org.hibernate.search.util.logging.impl.Log;
 import org.hibernate.search.util.logging.impl.LoggerFactory;
+import org.junit.Test;
 
 import static org.hibernate.search.test.analyzer.AnalyzerTest.assertTokensEqual;
+import static org.junit.Assert.assertEquals;
 
 /**
  * Test to verify HSEARCH-267.
@@ -47,7 +32,7 @@ import static org.hibernate.search.test.analyzer.AnalyzerTest.assertTokensEqual;
  *
  * @author Hardy Ferentschik
  */
-public class AnalyzerInheritanceTest extends SearchTestCase {
+public class AnalyzerInheritanceTest extends SearchTestBase {
 
 	public static final Log log = LoggerFactory.make();
 
@@ -56,6 +41,7 @@ public class AnalyzerInheritanceTest extends SearchTestCase {
 	 *
 	 * @throws Exception in case the test fails.
 	 */
+	@Test
 	public void testBySearch() throws Exception {
 		SubClass testClass = new SubClass();
 		testClass.setName( "Proca\u00EFne" );
@@ -67,7 +53,7 @@ public class AnalyzerInheritanceTest extends SearchTestCase {
 		tx = s.beginTransaction();
 
 
-		QueryParser parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "name", s.getSearchFactory().getAnalyzer( SubClass.class ) );
+		QueryParser parser = new QueryParser( "name", s.getSearchFactory().getAnalyzer( SubClass.class ) );
 		org.apache.lucene.search.Query luceneQuery = parser.parse( "name:Proca\u00EFne" );
 		FullTextQuery query = s.createFullTextQuery( luceneQuery, SubClass.class );
 		assertEquals( 1, query.getResultSize() );
@@ -90,6 +76,7 @@ public class AnalyzerInheritanceTest extends SearchTestCase {
 	 *
 	 * @throws Exception in case the test fails.
 	 */
+	@Test
 	public void testByAnalyzerRetrieval() throws Exception {
 
 		FullTextSession s = Search.getFullTextSession( openSession() );
@@ -101,7 +88,8 @@ public class AnalyzerInheritanceTest extends SearchTestCase {
 		s.close();
 	}
 
-	protected Class<?>[] getAnnotatedClasses() {
+	@Override
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] { SubClass.class };
 	}
 }

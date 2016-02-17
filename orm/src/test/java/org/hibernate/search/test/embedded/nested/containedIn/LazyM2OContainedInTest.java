@@ -1,50 +1,39 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.test.embedded.nested.containedIn;
 
 import java.util.List;
+import java.util.Map;
 
 import org.apache.lucene.index.Term;
+import org.apache.lucene.search.NumericRangeQuery;
 import org.apache.lucene.search.TermQuery;
-
 import org.hibernate.Transaction;
 import org.hibernate.cfg.AvailableSettings;
-import org.hibernate.cfg.Configuration;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.test.SearchTestCase;
+import org.hibernate.search.test.SearchTestBase;
+import org.hibernate.search.testsupport.TestForIssue;
 import org.hibernate.testing.cache.CachingRegionFactory;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
 
 /**
  * @author Emmanuel Bernard
  */
-public class LazyM2OContainedInTest extends SearchTestCase {
+public class LazyM2OContainedInTest extends SearchTestBase {
 
-	//HSEARCH-385
+	@Test
+	@TestForIssue( jiraKey = "HSEARCH-385")
+	@SuppressWarnings( "unchecked" )
 	public void testDocumentsAt0() {
-		FullTextSession fts = Search.getFullTextSession( getSessions().openSession() );
+		FullTextSession fts = Search.getFullTextSession( getSessionFactory().openSession() );
 		Transaction tx = fts.beginTransaction();
 		final Entity1ForDoc0 ent1 = new Entity1ForDoc0();
 		final Entity2ForDoc0 ent2 = new Entity2ForDoc0();
@@ -67,9 +56,14 @@ public class LazyM2OContainedInTest extends SearchTestCase {
 
 		tx = fts.beginTransaction();
 
-		assertEquals( 1, fts.createFullTextQuery( new TermQuery( new Term("uid", new Long(uid1).toString() ) ), Entity1ForDoc0.class ).getResultSize() );
-		assertEquals( 1, fts.createFullTextQuery( new TermQuery( new Term("entities2.uid", String.valueOf( uid2 ) ) ), Entity1ForDoc0.class ).getResultSize() );
-
+		assertEquals(
+				1,
+				fts.createFullTextQuery( new TermQuery( new Term( "uid", Long.toString( uid1 ) ) ), Entity1ForDoc0.class ).getResultSize()
+		);
+		assertEquals(
+				1,
+				fts.createFullTextQuery( new TermQuery( new Term( "entities2.uid", Long.toString( uid2 ) ) ), Entity1ForDoc0.class ).getResultSize()
+		);
 
 		tx.commit();
 
@@ -83,14 +77,16 @@ public class LazyM2OContainedInTest extends SearchTestCase {
 		tx.commit();
 	}
 
-	//HSEARCH-386
+	@Test
+	@TestForIssue( jiraKey = "HSEARCH-386")
+	@SuppressWarnings( "unchecked" )
 	public void testContainedInAndLazy() {
-		FullTextSession fts = Search.getFullTextSession( getSessions().openSession() );
+		FullTextSession fts = Search.getFullTextSession( getSessionFactory().openSession() );
 		Entity1ForUnindexed ent1_0 = new Entity1ForUnindexed();
 		Entity1ForUnindexed ent1_1 = new Entity1ForUnindexed();
 
-		Entity2ForUnindexed ent2_0   = new Entity2ForUnindexed();
-		Entity2ForUnindexed ent2_1   = new Entity2ForUnindexed();
+		Entity2ForUnindexed ent2_0 = new Entity2ForUnindexed();
+		Entity2ForUnindexed ent2_1 = new Entity2ForUnindexed();
 
 		ent2_0.setEntity1( ent1_0 );
 		ent1_0.getEntities2().add( ent2_0 );
@@ -120,7 +116,12 @@ public class LazyM2OContainedInTest extends SearchTestCase {
 		long otherId = other.getUid();
 
 		assertEquals( 1, fts
-				.createFullTextQuery( new TermQuery( new Term( "entity1.uid", new Long( ent1_0.getUid() ).toString() ) ), Entity2ForUnindexed.class )
+				.createFullTextQuery(
+						NumericRangeQuery.newLongRange(
+								"entity1.uid-numeric", ent1_0.getUid(), ent1_0.getUid(), true, true
+						),
+						Entity2ForUnindexed.class
+				)
 				.getResultSize() );
 		Entity1ForUnindexed toDelete = (Entity1ForUnindexed) fts.get( Entity1ForUnindexed.class, otherId );
 
@@ -145,13 +146,12 @@ public class LazyM2OContainedInTest extends SearchTestCase {
 	}
 
 	@Override
-	protected void configure(Configuration cfg) {
-		super.configure( cfg );
-		cfg.setProperty( AvailableSettings.CACHE_REGION_FACTORY, CachingRegionFactory.class.getName() );
+	public void configure(Map<String,Object> cfg) {
+		cfg.put( AvailableSettings.CACHE_REGION_FACTORY, CachingRegionFactory.class.getName() );
 	}
 
 	@Override
-	protected Class<?>[] getAnnotatedClasses() {
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class<?>[] {
 				Entity1ForDoc0.class,
 				Entity2ForDoc0.class,

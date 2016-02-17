@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.reader.functionality;
 
@@ -32,38 +15,34 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.FieldSelector;
-import org.apache.lucene.index.FieldInfos;
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.IndexCommit;
 import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermDocs;
-import org.apache.lucene.index.TermEnum;
-import org.apache.lucene.index.TermFreqVector;
-import org.apache.lucene.index.TermPositions;
-import org.apache.lucene.index.TermVectorMapper;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.RAMDirectory;
-
-import org.hibernate.search.indexes.impl.DirectoryBasedIndexManager;
 import org.hibernate.search.indexes.impl.SharingBufferReaderProvider;
+import org.hibernate.search.indexes.spi.DirectoryBasedIndexManager;
 import org.hibernate.search.spi.BuildContext;
 import org.hibernate.search.store.DirectoryProvider;
 import org.hibernate.search.store.impl.RAMDirectoryProvider;
+import org.hibernate.search.testsupport.setup.BuildContextForTest;
+import org.hibernate.search.testsupport.setup.SearchConfigurationForTest;
 
 /**
  * Testable extension of SharingBufferReaderProvider to make sure IndexReaders
  * are only opened when needed, and always correctly closed.
  *
- * @see SharingBufferIndexProviderTest
  * @author Sanne Grinovero
+ * @see SharingBufferIndexProviderTest
  */
 public class ExtendedSharingBufferReaderProvider extends SharingBufferReaderProvider {
 
 	private static final int NUM_DIRECTORY_PROVIDERS = 3;
 	private final Vector<MockIndexReader> createdReadersHistory = new Vector<MockIndexReader>( 500 );
 	final Map<Directory, TestManipulatorPerDP> manipulators = new ConcurrentHashMap<Directory, TestManipulatorPerDP>();
-	private final RAMDirectoryProvider[] directories = new RAMDirectoryProvider[ NUM_DIRECTORY_PROVIDERS ];
+	private final RAMDirectoryProvider[] directories = new RAMDirectoryProvider[NUM_DIRECTORY_PROVIDERS];
 	private final AtomicInteger currentDirectoryIndex = new AtomicInteger();
 	private volatile RAMDirectoryProvider currentDirectory;
 
@@ -85,7 +64,8 @@ public class ExtendedSharingBufferReaderProvider extends SharingBufferReaderProv
 		private final RAMDirectoryProvider dp = new RAMDirectoryProvider();
 
 		TestManipulatorPerDP(int seed) {
-			dp.initialize( String.valueOf( seed ), null, null );
+			dp.initialize( String.valueOf( seed ), new Properties(), new BuildContextForTest( new SearchConfigurationForTest() ) );
+			dp.start( null );
 		}
 
 		public void setIndexChanged() {
@@ -107,7 +87,7 @@ public class ExtendedSharingBufferReaderProvider extends SharingBufferReaderProv
 	 */
 	public void swithDirectory() {
 		int index = currentDirectoryIndex.incrementAndGet();
-		currentDirectory = directories[ index % NUM_DIRECTORY_PROVIDERS ];
+		currentDirectory = directories[index % NUM_DIRECTORY_PROVIDERS];
 	}
 
 	public boolean isReaderCurrent(MockIndexReader reader) {
@@ -122,7 +102,7 @@ public class ExtendedSharingBufferReaderProvider extends SharingBufferReaderProv
 	}
 
 	@Override
-	protected IndexReader readerFactory(Directory directory) {
+	protected DirectoryReader readerFactory(Directory directory) throws IOException {
 		TestManipulatorPerDP manipulatorPerDP = manipulators.get( directory );
 		if ( !manipulatorPerDP.isReaderCreated.compareAndSet( false, true ) ) {
 			throw new IllegalStateException( "IndexReader created twice" );
@@ -132,8 +112,7 @@ public class ExtendedSharingBufferReaderProvider extends SharingBufferReaderProv
 		}
 	}
 
-	@Override
-	public void initialize(DirectoryBasedIndexManager indexManager, Properties props) {
+	public void initialize() {
 		super.initialize( new MockDirectoryBasedIndexManager(), null );
 	}
 
@@ -152,7 +131,7 @@ public class ExtendedSharingBufferReaderProvider extends SharingBufferReaderProv
 	 */
 	public class MockDirectoryBasedIndexManager extends DirectoryBasedIndexManager {
 
-		private MockDirectoryProvider provider = new MockDirectoryProvider();
+		private final MockDirectoryProvider provider = new MockDirectoryProvider();
 
 		@Override
 		public DirectoryProvider getDirectoryProvider() {
@@ -181,15 +160,17 @@ public class ExtendedSharingBufferReaderProvider extends SharingBufferReaderProv
 		}
 	}
 
-	public class MockIndexReader extends IndexReader {
+	public class MockIndexReader extends DirectoryReader {
 
 		private final AtomicBoolean closed = new AtomicBoolean( false );
 		private final AtomicBoolean hasAlreadyBeenReOpened = new AtomicBoolean( false );
 		private final AtomicBoolean isIndexReaderCurrent;
 
-		MockIndexReader(AtomicBoolean isIndexReaderCurrent) {
+		MockIndexReader(AtomicBoolean isIndexReaderCurrent) throws IOException {
+			//make the super constructor happy as the class is "locked down"
+			super( new RAMDirectory(), new LeafReader[0] );
 			this.isIndexReaderCurrent = isIndexReaderCurrent;
-			if ( ! isIndexReaderCurrent.compareAndSet( false, true ) ) {
+			if ( !isIndexReaderCurrent.compareAndSet( false, true ) ) {
 				throw new IllegalStateException( "Unnecessarily reopened" );
 			}
 			createdReadersHistory.add( this );
@@ -211,9 +192,14 @@ public class ExtendedSharingBufferReaderProvider extends SharingBufferReaderProv
 		}
 
 		@Override
-		public synchronized IndexReader reopen() {
+		public boolean hasDeletions() {
+			return false;//just something to make MultiReader constructor happy
+		}
+
+		@Override
+		protected DirectoryReader doOpenIfChanged() throws IOException {
 			if ( isIndexReaderCurrent.get() ) {
-				return this;
+				return null;
 			}
 			else {
 				if ( hasAlreadyBeenReOpened.compareAndSet( false, true ) ) {
@@ -226,108 +212,28 @@ public class ExtendedSharingBufferReaderProvider extends SharingBufferReaderProv
 		}
 
 		@Override
-		protected void doDelete(int docNum) {
-			throw new UnsupportedOperationException();
+		protected DirectoryReader doOpenIfChanged(IndexCommit commit) throws IOException {
+			return doOpenIfChanged();
 		}
 
 		@Override
-		protected void doSetNorm(int doc, String field, byte value) {
-			throw new UnsupportedOperationException();
+		protected DirectoryReader doOpenIfChanged(IndexWriter writer, boolean applyAllDeletes) throws IOException {
+			return doOpenIfChanged();
 		}
 
 		@Override
-		protected void doUndeleteAll() {
-			throw new UnsupportedOperationException();
+		public long getVersion() {
+			return 0;
 		}
 
 		@Override
-		public int docFreq(Term t) {
-			throw new UnsupportedOperationException();
+		public boolean isCurrent() throws IOException {
+			return false;
 		}
 
 		@Override
-		public Document document(int n, FieldSelector fieldSelector) {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public TermFreqVector getTermFreqVector(int docNumber, String field) {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public void getTermFreqVector(int docNumber, String field, TermVectorMapper mapper) {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public void getTermFreqVector(int docNumber, TermVectorMapper mapper) {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public TermFreqVector[] getTermFreqVectors(int docNumber) {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public boolean hasDeletions() {
-			return false;//just something to make MultiReader constructor happy
-		}
-
-		@Override
-		public boolean isDeleted(int n) {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public int maxDoc() {
-			return 10;//just something to make MultiReader constructor happy
-		}
-
-		@Override
-		public byte[] norms(String field) throws IOException {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public void norms(String field, byte[] bytes, int offset) {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public int numDocs() {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public TermDocs termDocs() {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public TermPositions termPositions() {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public TermEnum terms() throws IOException {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public TermEnum terms(Term t) throws IOException {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		protected void doCommit(Map<String, String> commitUserData) {
-			// no-op
-		}
-
-		@Override
-		public FieldInfos getFieldInfos() {
-			throw new UnsupportedOperationException();
+		public IndexCommit getIndexCommit() throws IOException {
+			return null;
 		}
 
 	}

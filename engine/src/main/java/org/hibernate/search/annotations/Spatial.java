@@ -1,26 +1,12 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2012 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.annotations;
 
-import org.hibernate.search.spatial.SpatialFieldBridgeByQuadTree;
+import org.hibernate.search.spatial.SpatialFieldBridgeByHash;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
@@ -34,14 +20,14 @@ import java.lang.annotation.Target;
  * Spatial coordinates can be indexed as latitude / longitude fields and queried
  * via range queries. This is known as the {@code SpatialMode.RANGE} approach.
  *
- * Otherwise, they can be indexed using a quad-tree index. This is known as the
- * @code SpatialMode.GRID} approach. The size of the grid can be adjusted with {@code topGridLevel}
- * and {@code bottomGridLevel}.
+ * Otherwise, they can be indexed using a spatial hash index. This is known as the
+ * {@code SpatialMode.HASH} approach. The size of the grid can be adjusted with {@code topSpatialHashLevel}
+ * and {@code bottomSpatialHashLevel}.
  *
  * For more information on which model to use, read the Hibernate Search reference documentation.
  *
  * If your longitude and latitude information are hosted on free properties,
- * Add {@code &#064;Spatial} on the entity (class-level). The {@link Latitude} and {@link Longitude}
+ * Add {@code @Spatial} on the entity (class-level). The {@link Latitude} and {@link Longitude}
  * annotations must mark the properties.
  *
  * <pre>
@@ -66,8 +52,8 @@ import java.lang.annotation.Target;
   * }
   * </pre>
  *
- * @experimental Spatial support is still considered experimental
- * @author Nicolas Helleringer (nicolas.helleringer@novacodex.net)
+ * @hsearch.experimental Spatial support is still considered experimental
+ * @author Nicolas Helleringer
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target( { ElementType.METHOD, ElementType.FIELD, ElementType.TYPE })
@@ -105,12 +91,12 @@ public @interface Spatial {
 	SpatialMode spatialMode() default SpatialMode.RANGE;
 
 	/**
-	 * @return top range quad tree level for spatial indexing
+	 * @return top range spatial hash level for spatial indexing
 	 */
-	int topQuadTreeLevel() default SpatialFieldBridgeByQuadTree.DEFAULT_TOP_QUAD_TREE_LEVEL;
+	int topSpatialHashLevel() default SpatialFieldBridgeByHash.DEFAULT_TOP_SPATIAL_HASH_LEVEL;
 
 	/**
-	 * @return bottom quad tree level for spatial indexing
+	 * @return bottom spatial hash level for spatial indexing
 	 */
-	int bottomQuadTreeLevel() default SpatialFieldBridgeByQuadTree.DEFAULT_BOTTOM_QUAD_TREE_LEVEL;
+	int bottomSpatialHashLevel() default SpatialFieldBridgeByHash.DEFAULT_BOTTOM_SPATIAL_HASH_LEVEL;
 }

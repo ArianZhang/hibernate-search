@@ -1,47 +1,28 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.query.engine.impl;
 
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.FieldSelector;
-import org.apache.lucene.document.FieldSelectorResult;
-import org.apache.lucene.document.MapFieldSelector;
 import org.apache.lucene.search.TopDocs;
-
-import org.hibernate.search.ProjectionConstants;
 import org.hibernate.search.bridge.spi.ConversionContext;
 import org.hibernate.search.bridge.util.impl.ContextualExceptionBridgeHelper;
+import org.hibernate.search.engine.ProjectionConstants;
 import org.hibernate.search.engine.impl.DocumentBuilderHelper;
-import org.hibernate.search.engine.spi.SearchFactoryImplementor;
+import org.hibernate.search.engine.integration.impl.ExtendedSearchIntegrator;
 import org.hibernate.search.query.engine.spi.DocumentExtractor;
 import org.hibernate.search.query.engine.spi.EntityInfo;
-import org.hibernate.search.query.collector.impl.FieldCacheCollector;
-import org.hibernate.search.util.logging.impl.LoggerFactory;
-import org.hibernate.search.util.logging.impl.Log;
+
 
 /**
  * DocumentExtractor is a traverser over the full-text results (EntityInfo)
@@ -58,39 +39,33 @@ import org.hibernate.search.util.logging.impl.Log;
  * @author Emmanuel Bernard
  * @author John Griffin
  * @author Hardy Ferentschik
- * @author Sanne Grinovero <sanne@hibernate.org> (C) 2011 Red Hat Inc.
+ * @author Sanne Grinovero (C) 2011 Red Hat Inc.
  */
 public class DocumentExtractorImpl implements DocumentExtractor {
 
-	private static final Log log = LoggerFactory.make();
-
-	private final SearchFactoryImplementor searchFactoryImplementor;
+	private final ExtendedSearchIntegrator extendedIntegrator;
 	private final String[] projection;
 	private final QueryHits queryHits;
-	private final IndexSearcherWithPayload searcher;
-	private FieldSelector fieldSelector;
+	private final LazyQueryState searcher;
+	private ReusableDocumentStoredFieldVisitor fieldLoadingVisitor;
 	private boolean allowFieldSelection;
 	private boolean needId;
 	private final Map<String, Class> targetedClasses;
-	private int firstIndex;
-	private int maxIndex;
-	private Object query;
+	private final int firstIndex;
+	private final int maxIndex;
 	private final Class singleClassIfPossible; //null when not possible
-	private final FieldCacheCollector classTypeCollector; //null when not used
-	private final FieldCacheCollector idsCollector; //null when not used
 	private final ConversionContext exceptionWrap = new ContextualExceptionBridgeHelper();
 
 	public DocumentExtractorImpl(QueryHits queryHits,
-								SearchFactoryImplementor searchFactoryImplementor,
+								ExtendedSearchIntegrator extendedIntegrator,
 								String[] projection,
 								Set<String> idFieldNames,
 								boolean allowFieldSelection,
-								IndexSearcherWithPayload searcher,
-								Object query,
+								LazyQueryState searcher,
 								int firstIndex,
 								int maxIndex,
 								Set<Class<?>> classesAndSubclasses) {
-		this.searchFactoryImplementor = searchFactoryImplementor;
+		this.extendedIntegrator = extendedIntegrator;
 		if ( projection != null ) {
 			this.projection = projection.clone();
 		}
@@ -111,23 +86,20 @@ public class DocumentExtractorImpl implements DocumentExtractor {
 			singleClassIfPossible = null;
 		}
 		this.searcher = searcher;
-		this.query = query;
 		this.firstIndex = firstIndex;
 		this.maxIndex = maxIndex;
-		this.classTypeCollector = queryHits.getClassTypeCollector();
-		this.idsCollector = queryHits.getIdsCollector();
 		initFieldSelection( projection, idFieldNames );
 	}
 
 	private void initFieldSelection(String[] projection, Set<String> idFieldNames) {
-		Map<String, FieldSelectorResult> fields;
+		HashSet<String> fields;
 		if ( projection == null ) {
 			// we're going to load hibernate entities
 			needId = true;
-			fields = new HashMap<String, FieldSelectorResult>( 2 ); // id + class
+			fields = new HashSet<String>( 2 ); // id + class
 		}
 		else {
-			fields = new HashMap<String, FieldSelectorResult>( projection.length + 2 ); // we actually have no clue
+			fields = new HashSet<String>( projection.length + 2 ); // we actually have no clue
 			for ( String projectionName : projection ) {
 				if ( projectionName == null ) {
 					continue;
@@ -160,38 +132,32 @@ public class DocumentExtractorImpl implements DocumentExtractor {
 					continue;
 				}
 				else {
-					fields.put( projectionName, FieldSelectorResult.LOAD );
+					fields.add( projectionName );
 				}
 			}
 		}
-		if ( singleClassIfPossible == null && classTypeCollector == null ) {
-			fields.put( ProjectionConstants.OBJECT_CLASS, FieldSelectorResult.LOAD );
+		if ( singleClassIfPossible == null ) {
+			fields.add( ProjectionConstants.OBJECT_CLASS );
 		}
-		if ( needId && idsCollector == null ) {
+		if ( needId ) {
 			for ( String idFieldName : idFieldNames ) {
-				fields.put( idFieldName, FieldSelectorResult.LOAD );
+				fields.add( idFieldName );
 			}
 		}
-		if ( fields.size() == 1 ) {
-			// surprised: from unit tests it seems this case is possible quite often
-			// so apply an additional optimization using LOAD_AND_BREAK instead:
-			String key = fields.keySet().iterator().next();
-			fields.put( key, FieldSelectorResult.LOAD_AND_BREAK );
-		}
 		if ( fields.size() != 0 ) {
-			this.fieldSelector = new MapFieldSelector( fields );
+			this.fieldLoadingVisitor = new ReusableDocumentStoredFieldVisitor( fields );
 		}
 		// else: this.fieldSelector = null; //We need no fields at all
 	}
 
-	private EntityInfo extractEntityInfo(int docId, Document document, int scoreDocIndex, ConversionContext exceptionWrap) throws IOException {
-		Class clazz = extractClass( docId, document, scoreDocIndex );
-		String idName = DocumentBuilderHelper.getDocumentIdName( searchFactoryImplementor, clazz );
+	private EntityInfo extractEntityInfo(int docId, Document document, ConversionContext exceptionWrap) throws IOException {
+		Class clazz = extractClass( docId, document );
+		String idName = DocumentBuilderHelper.getDocumentIdName( extendedIntegrator, clazz );
 		Serializable id = extractId( docId, document, clazz );
 		Object[] projected = null;
 		if ( projection != null && projection.length > 0 ) {
 			projected = DocumentBuilderHelper.getDocumentFields(
-					searchFactoryImplementor, clazz, document, projection, exceptionWrap
+					extendedIntegrator, clazz, document, projection, exceptionWrap
 			);
 		}
 		return new EntityInfoImpl( clazz, idName, id, projected );
@@ -201,45 +167,33 @@ public class DocumentExtractorImpl implements DocumentExtractor {
 		if ( !needId ) {
 			return null;
 		}
-		else if ( this.idsCollector != null ) {
-			return (Serializable) this.idsCollector.getValue( docId );
-		}
 		else {
-			return DocumentBuilderHelper.getDocumentId( searchFactoryImplementor, clazz, document, exceptionWrap );
+			return DocumentBuilderHelper.getDocumentId( extendedIntegrator, clazz, document, exceptionWrap );
 		}
 	}
 
-	private Class extractClass(int docId, Document document, int scoreDocIndex) throws IOException {
+	private Class extractClass(int docId, Document document) throws IOException {
 		//maybe we can avoid document extraction:
 		if ( singleClassIfPossible != null ) {
 			return singleClassIfPossible;
 		}
-		String className;
-		if ( classTypeCollector != null ) {
-			className = (String) classTypeCollector.getValue( docId );
-			if ( className == null ) {
-				log.forceToUseDocumentExtraction();
-				className = forceClassNameExtraction( scoreDocIndex );
-			}
-		}
-		else {
-			className = document.get( ProjectionConstants.OBJECT_CLASS );
-		}
+		String className = document.get( ProjectionConstants.OBJECT_CLASS );
 		//and quite likely we can avoid the Reflect helper:
 		Class clazz = targetedClasses.get( className );
 		if ( clazz != null ) {
 			return clazz;
 		}
 		else {
-			return DocumentBuilderHelper.getDocumentClass( className );
+			return DocumentBuilderHelper.getDocumentClass( className, extendedIntegrator.getServiceManager() );
 		}
 	}
 
+	@Override
 	public EntityInfo extract(int scoreDocIndex) throws IOException {
 		int docId = queryHits.docId( scoreDocIndex );
 		Document document = extractDocument( scoreDocIndex );
 
-		EntityInfo entityInfo = extractEntityInfo( docId, document, scoreDocIndex, exceptionWrap );
+		EntityInfo entityInfo = extractEntityInfo( docId, document, exceptionWrap );
 		Object[] eip = entityInfo.getProjection();
 
 		if ( eip != null && eip.length > 0 ) {
@@ -275,26 +229,30 @@ public class DocumentExtractorImpl implements DocumentExtractor {
 		return entityInfo;
 	}
 
+	@Override
 	public int getFirstIndex() {
 		return firstIndex;
 	}
 
+	@Override
 	public int getMaxIndex() {
 		return maxIndex;
 	}
 
+	@Override
 	public void close() {
-		searcher.closeSearcher( query, searchFactoryImplementor );
+		searcher.close();
 	}
 
 	private Document extractDocument(int index) throws IOException {
 		if ( allowFieldSelection ) {
-			if ( fieldSelector == null ) {
+			if ( fieldLoadingVisitor == null ) {
 				//we need no fields
 				return null;
 			}
 			else {
-				return queryHits.doc( index, fieldSelector );
+				queryHits.visitDocument( index, fieldLoadingVisitor );
+				return fieldLoadingVisitor.getDocumentAndReset();
 			}
 		}
 		else {
@@ -303,20 +261,8 @@ public class DocumentExtractorImpl implements DocumentExtractor {
 	}
 
 	/**
-	 * In rare cases the Lucene FieldCache might fail to return a value, at this point we already extracted
-	 * the Document so we need to repeat the process to extract the missing field only.
-	 * @param scoreDocIndex
-	 * @return
-	 * @throws IOException
+	 * Required by Infinispan Query.
 	 */
-	private String forceClassNameExtraction(int scoreDocIndex) throws IOException {
-		Map<String, FieldSelectorResult> fields = new HashMap<String, FieldSelectorResult>( 1 );
-		fields.put( ProjectionConstants.OBJECT_CLASS, FieldSelectorResult.LOAD_AND_BREAK );
-		MapFieldSelector classOnly = new MapFieldSelector( fields );
-		Document doc = queryHits.doc( scoreDocIndex, classOnly );
-		return doc.get( ProjectionConstants.OBJECT_CLASS );
-	}
-
 	@Override
 	public TopDocs getTopDocs() {
 		return queryHits.getTopDocs();

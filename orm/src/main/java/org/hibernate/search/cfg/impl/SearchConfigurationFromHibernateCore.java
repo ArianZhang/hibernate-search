@@ -1,43 +1,34 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.cfg.impl;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Properties;
+import java.util.Set;
 
 import org.hibernate.annotations.common.reflection.ReflectionManager;
 import org.hibernate.annotations.common.reflection.java.JavaReflectionManager;
+import org.hibernate.boot.Metadata;
+import org.hibernate.boot.spi.MetadataImplementor;
+import org.hibernate.engine.config.spi.ConfigurationService;
 import org.hibernate.mapping.PersistentClass;
 import org.hibernate.search.cfg.SearchMapping;
+import org.hibernate.search.cfg.spi.IdUniquenessResolver;
 import org.hibernate.search.cfg.spi.SearchConfiguration;
 import org.hibernate.search.cfg.spi.SearchConfigurationBase;
 import org.hibernate.search.engine.impl.HibernateStatelessInitializer;
+import org.hibernate.search.engine.service.classloading.spi.ClassLoaderService;
+import org.hibernate.search.engine.service.spi.Service;
+import org.hibernate.search.hcore.impl.HibernateSessionFactoryService;
 import org.hibernate.search.spi.InstanceInitializer;
-import org.hibernate.search.spi.ServiceProvider;
 
 /**
  * Search configuration implementation wrapping an Hibernate Core configuration
@@ -46,89 +37,80 @@ import org.hibernate.search.spi.ServiceProvider;
  */
 public class SearchConfigurationFromHibernateCore extends SearchConfigurationBase implements SearchConfiguration {
 
-	private final org.hibernate.cfg.Configuration cfg;
+	private final ConfigurationService configurationService;
+	private final ClassLoaderService classLoaderService;
+	private final Map<Class<? extends Service>, Object> providedServices;
+	private final Metadata metadata;
+	private final Properties legacyConfigurationProperties;//For compatibility reasons only. Should be removed? See HSEARCH-1890
+
 	private ReflectionManager reflectionManager;
 
-	public SearchConfigurationFromHibernateCore(org.hibernate.cfg.Configuration cfg) {
-		if ( cfg == null ) throw new NullPointerException( "Configuration is null" );
-		this.cfg = cfg;
+	public SearchConfigurationFromHibernateCore(Metadata metadata, ConfigurationService configurationService,
+			org.hibernate.boot.registry.classloading.spi.ClassLoaderService hibernateClassLoaderService,
+			HibernateSessionFactoryService sessionService) {
+		this.metadata = metadata;
+		// hmm, not sure why we throw NullPointerExceptions from these sanity checks
+		// Shouldn't we use AssertionFailure or a log message + SearchException? (HF)
+		if ( configurationService == null ) {
+			throw new NullPointerException( "Configuration is null" );
+		}
+		this.configurationService = configurationService;
+
+		if ( hibernateClassLoaderService == null ) {
+			throw new NullPointerException( "ClassLoaderService is null" );
+		}
+		this.classLoaderService = new DelegatingClassLoaderService( hibernateClassLoaderService );
+		Map<Class<? extends Service>, Object> providedServices = new HashMap<>( 1 );
+		providedServices.put( IdUniquenessResolver.class, new HibernateCoreIdUniquenessResolver( metadata ) );
+		providedServices.put( HibernateSessionFactoryService.class, sessionService );
+		this.providedServices = Collections.unmodifiableMap( providedServices );
+		this.legacyConfigurationProperties = extractProperties( configurationService );
 	}
 
+	@Override
 	public Iterator<Class<?>> getClassMappings() {
-		return new ClassIterator( cfg.getClassMappings() );
+		return new ClassIterator( metadata.getEntityBindings().iterator() );
 	}
 
-	public Class<?> getClassMapping(String name) {
-		return cfg.getClassMapping( name ).getMappedClass();
+	@Override
+	public Class<?> getClassMapping(String entityName) {
+		return metadata.getEntityBinding( entityName ).getMappedClass();
 	}
 
+	@Override
 	public String getProperty(String propertyName) {
-		return cfg.getProperty( propertyName );
+		return configurationService.getSetting( propertyName, org.hibernate.engine.config.spi.StandardConverters.STRING );
 	}
 
+	@Override
 	public Properties getProperties() {
-		return cfg.getProperties();
+		return this.legacyConfigurationProperties;
 	}
 
+	@Override
 	public ReflectionManager getReflectionManager() {
 		if ( reflectionManager == null ) {
-			try {
-				//TODO introduce a ReflectionManagerHolder interface to avoid reflection
-				//I want to avoid hard link between HAN and Validator for such a simple need
-				//reuse the existing reflectionManager one when possible
-				reflectionManager =
-						(ReflectionManager) cfg.getClass().getMethod( "getReflectionManager" ).invoke( cfg );
-
+			if ( metadata instanceof MetadataImplementor ) {
+				reflectionManager = ((MetadataImplementor) metadata).getMetadataBuildingOptions().getReflectionManager();
 			}
-			catch (Exception e) {
+			if ( reflectionManager == null ) {
+				// Fall back to our own instance of JavaReflectionManager
+				// when metadata is not a MetadataImplementor or
+				// the reflection manager were not created by Hibernate yet.
 				reflectionManager = new JavaReflectionManager();
 			}
 		}
 		return reflectionManager;
 	}
 
+	@Override
 	public SearchMapping getProgrammaticMapping() {
 		return null;
 	}
 
-	public Map<Class<? extends ServiceProvider<?>>, Object> getProvidedServices() {
-		return Collections.emptyMap();
-	}
-
-	private static class ClassIterator implements Iterator<Class<?>> {
-		private Iterator hibernatePersistentClassIterator;
-		private Class<?> future;
-
-		private ClassIterator(Iterator hibernatePersistentClassIterator) {
-			this.hibernatePersistentClassIterator = hibernatePersistentClassIterator;
-		}
-
-		public boolean hasNext() {
-			//we need to read the next non null one. getMappedClass() can return null and should be ignored
-			if ( future != null) return true;
-			do {
-				if ( ! hibernatePersistentClassIterator.hasNext() ) {
-					future = null;
-					return false;
-				}
-				final PersistentClass pc = (PersistentClass) hibernatePersistentClassIterator.next();
-				future = pc.getMappedClass();
-			}
-			while ( future == null );
-			return true;
-		}
-
-		public Class<?> next() {
-			//run hasNext to init the next element
-			if ( ! hasNext() ) throw new NoSuchElementException();
-			Class<?> result = future;
-			future = null;
-			return result;
-		}
-
-		public void remove() {
-			throw new UnsupportedOperationException( "Cannot modify Hibernate Core metadata" );
-		}
+	@Override
+	public Map<Class<? extends Service>, Object> getProvidedServices() {
+		return providedServices;
 	}
 
 	@Override
@@ -139,6 +121,66 @@ public class SearchConfigurationFromHibernateCore extends SearchConfigurationBas
 	@Override
 	public boolean isIndexMetadataComplete() {
 		return true;
+	}
+
+	@Override
+	public ClassLoaderService getClassLoaderService() {
+		return classLoaderService;
+	}
+
+	private static class ClassIterator implements Iterator<Class<?>> {
+		private Iterator<PersistentClass> hibernatePersistentClassIterator;
+		private Class<?> future;
+
+		private ClassIterator(Iterator<PersistentClass> hibernatePersistentClassIterator) {
+			this.hibernatePersistentClassIterator = hibernatePersistentClassIterator;
+		}
+
+		@Override
+		public boolean hasNext() {
+			//we need to read the next non null one. getMappedClass() can return null and should be ignored
+			if ( future != null ) {
+				return true;
+			}
+			do {
+				if ( !hibernatePersistentClassIterator.hasNext() ) {
+					future = null;
+					return false;
+				}
+				final PersistentClass pc = hibernatePersistentClassIterator.next();
+				future = pc.getMappedClass();
+			}
+			while ( future == null );
+			return true;
+		}
+
+		@Override
+		public Class<?> next() {
+			//run hasNext to init the next element
+			if ( !hasNext() ) {
+				throw new NoSuchElementException();
+			}
+			Class<?> result = future;
+			future = null;
+			return result;
+		}
+
+		@Override
+		public void remove() {
+			throw new UnsupportedOperationException( "Cannot modify Hibernate Core metadata" );
+		}
+	}
+
+	private static Properties extractProperties(final ConfigurationService configurationService) {
+		Properties props = new Properties();
+		Set<Map.Entry> entrySet = configurationService.getSettings().entrySet();
+		for ( Map.Entry entry : entrySet ) {
+			final Object key = entry.getKey();
+			if ( key instanceof String ) {
+				props.put( key, entry.getValue() );
+			}
+		}
+		return props;
 	}
 
 }

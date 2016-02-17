@@ -1,27 +1,9 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
-
 package org.hibernate.search.query.hibernate.impl;
 
 import java.util.List;
@@ -29,15 +11,17 @@ import java.util.Set;
 
 import org.hibernate.Criteria;
 import org.hibernate.Session;
-import org.hibernate.annotations.common.AssertionFailure;
 import org.hibernate.engine.spi.SessionImplementor;
 import org.hibernate.internal.CriteriaImpl;
-import org.hibernate.search.SearchException;
-import org.hibernate.search.engine.spi.SearchFactoryImplementor;
+import org.hibernate.search.exception.SearchException;
+import org.hibernate.search.engine.integration.impl.ExtendedSearchIntegrator;
+import org.hibernate.search.engine.service.classloading.spi.ClassLoaderService;
+import org.hibernate.search.engine.service.classloading.spi.ClassLoadingException;
+import org.hibernate.search.engine.service.spi.ServiceManager;
+import org.hibernate.search.exception.AssertionFailure;
 import org.hibernate.search.query.DatabaseRetrievalMethod;
 import org.hibernate.search.query.ObjectLookupMethod;
 import org.hibernate.search.query.engine.spi.TimeoutManager;
-import org.hibernate.search.util.impl.ClassLoaderHelper;
 import org.hibernate.search.util.logging.impl.Log;
 import org.hibernate.search.util.logging.impl.LoggerFactory;
 
@@ -48,7 +32,7 @@ public class ObjectLoaderBuilder {
 	private Criteria criteria;
 	private List<Class<?>> targetedEntities;
 	private SessionImplementor session;
-	private SearchFactoryImplementor searchFactoryImplementor;
+	private ExtendedSearchIntegrator extendedIntegrator;
 	private Set<Class<?>> indexedTargetedEntities;
 	private TimeoutManager timeoutManager;
 	private ObjectLookupMethod lookupMethod;
@@ -89,14 +73,14 @@ public class ObjectLoaderBuilder {
 
 	private Loader getMultipleEntitiesLoader() {
 		final MultiClassesQueryLoader multiClassesLoader = new MultiClassesQueryLoader();
-		multiClassesLoader.init( (Session) session, searchFactoryImplementor, getObjectInitializer(), timeoutManager );
+		multiClassesLoader.init( (Session) session, extendedIntegrator, getObjectInitializer(), timeoutManager );
 		multiClassesLoader.setEntityTypes( indexedTargetedEntities );
 		return multiClassesLoader;
 	}
 
 	private Loader getSingleEntityLoader() {
 		final QueryLoader queryLoader = new QueryLoader();
-		queryLoader.init( (Session) session, searchFactoryImplementor, getObjectInitializer(), timeoutManager );
+		queryLoader.init( (Session) session, extendedIntegrator, getObjectInitializer(), timeoutManager );
 		queryLoader.setEntityType( targetedEntities.iterator().next() );
 		return queryLoader;
 	}
@@ -109,14 +93,16 @@ public class ObjectLoaderBuilder {
 		if ( criteria instanceof CriteriaImpl ) {
 			String targetEntity = ( (CriteriaImpl) criteria ).getEntityOrClassName();
 			if ( entityType == null ) {
+				ServiceManager serviceManager = extendedIntegrator.getServiceManager();
 				try {
-					entityType = ClassLoaderHelper.classForName(
-							targetEntity,
-							ObjectLoaderBuilder.class.getClassLoader()
-					);
+					ClassLoaderService classLoaderService = serviceManager.requestService( ClassLoaderService.class );
+					entityType = classLoaderService.classForName( targetEntity );
 				}
-				catch ( ClassNotFoundException e ) {
+				catch (ClassLoadingException e) {
 					throw new SearchException( "Unable to load entity class from criteria: " + targetEntity, e );
+				}
+				finally {
+					serviceManager.releaseService( ClassLoaderService.class );
 				}
 			}
 			else {
@@ -126,7 +112,7 @@ public class ObjectLoaderBuilder {
 			}
 		}
 		QueryLoader queryLoader = new QueryLoader();
-		queryLoader.init( (Session) session, searchFactoryImplementor, getObjectInitializer(), timeoutManager );
+		queryLoader.init( (Session) session, extendedIntegrator, getObjectInitializer(), timeoutManager );
 		queryLoader.setEntityType( entityType );
 		queryLoader.setCriteria( criteria );
 		return queryLoader;
@@ -137,8 +123,8 @@ public class ObjectLoaderBuilder {
 		return this;
 	}
 
-	public ObjectLoaderBuilder searchFactory(SearchFactoryImplementor searchFactoryImplementor) {
-		this.searchFactoryImplementor = searchFactoryImplementor;
+	public ObjectLoaderBuilder searchFactory(ExtendedSearchIntegrator extendedIntegrator) {
+		this.extendedIntegrator = extendedIntegrator;
 		return this;
 	}
 
@@ -152,7 +138,7 @@ public class ObjectLoaderBuilder {
 		return this;
 	}
 
-	private ObjectsInitializer getObjectInitializer() {
+	private ObjectInitializer getObjectInitializer() {
 		log.tracef(
 				"ObjectsInitializer: Use lookup method %s and database retrieval method %s",
 				lookupMethod,
@@ -161,13 +147,13 @@ public class ObjectLoaderBuilder {
 		if ( criteria != null && retrievalMethod != DatabaseRetrievalMethod.QUERY ) {
 			throw new SearchException( "Cannot mix custom criteria query and " + DatabaseRetrievalMethod.class.getSimpleName() + "." + retrievalMethod );
 		}
-		final ObjectsInitializer initializer;
+		final ObjectInitializer initializer;
 		if ( retrievalMethod == DatabaseRetrievalMethod.FIND_BY_ID ) {
 			//return early as this method does naturally 2lc + session lookup
-			return LookupObjectsInitializer.INSTANCE;
+			return LookupObjectInitializer.INSTANCE;
 		}
 		else if ( retrievalMethod == DatabaseRetrievalMethod.QUERY ) {
-			initializer = CriteriaObjectsInitializer.INSTANCE;
+			initializer = CriteriaObjectInitializer.INSTANCE;
 		}
 		else {
 			throw new AssertionFailure( "Unknown " + DatabaseRetrievalMethod.class.getSimpleName() + "." + retrievalMethod );
@@ -176,11 +162,11 @@ public class ObjectLoaderBuilder {
 			return initializer;
 		}
 		else if ( lookupMethod == ObjectLookupMethod.PERSISTENCE_CONTEXT ) {
-			return new PersistenceContextObjectsInitializer( initializer );
+			return new PersistenceContextObjectInitializer( initializer );
 		}
 		else if ( lookupMethod == ObjectLookupMethod.SECOND_LEVEL_CACHE ) {
 			//we want to check the PC first, that's cheaper
-			return new PersistenceContextObjectsInitializer( new SecondLevelCacheObjectsInitializer( initializer ) );
+			return new PersistenceContextObjectInitializer( new SecondLevelCacheObjectInitializer( initializer ) );
 		}
 		else {
 			throw new AssertionFailure( "Unknown " + ObjectLookupMethod.class.getSimpleName() + "." + lookupMethod );

@@ -1,41 +1,26 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2012 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.configuration;
 
 import java.lang.annotation.ElementType;
 import java.util.Arrays;
 
-import junit.framework.Assert;
-
+import org.junit.Assert;
 import org.apache.lucene.search.Query;
-import org.hibernate.search.SearchException;
+import org.hibernate.search.exception.SearchException;
 import org.hibernate.search.annotations.ProvidedId;
 import org.hibernate.search.backend.spi.Work;
 import org.hibernate.search.backend.spi.WorkType;
 import org.hibernate.search.cfg.SearchMapping;
-import org.hibernate.search.engine.spi.SearchFactoryImplementor;
 import org.hibernate.search.query.dsl.QueryBuilder;
-import org.hibernate.search.spi.SearchFactoryBuilder;
-import org.hibernate.search.test.util.ManualConfiguration;
-import org.hibernate.search.test.util.ManualTransactionContext;
+import org.hibernate.search.spi.SearchIntegratorBuilder;
+import org.hibernate.search.spi.SearchIntegrator;
+import org.hibernate.search.testsupport.setup.SearchConfigurationForTest;
+import org.hibernate.search.testsupport.setup.TransactionContextForTest;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -45,7 +30,7 @@ import org.junit.rules.ExpectedException;
  * By overriding {@link org.hibernate.search.cfg.spi.SearchConfiguration#isIdProvidedImplicit()}
  * we allow to assume entities are annotated with ProvidedId.
  *
- * @author Sanne Grinovero <sanne@hibernate.org> (C) 2012 Red Hat Inc.
+ * @author Sanne Grinovero (C) 2012 Red Hat Inc.
  */
 public class ImplicitProvidedIdTest {
 
@@ -61,12 +46,11 @@ public class ImplicitProvidedIdTest {
 			.property( "title", ElementType.FIELD ).field()
 			.property( "text", ElementType.FIELD ).field()
 			;
-		ManualConfiguration cfg = new ManualConfiguration()
-			.addProperty( "hibernate.search.default.directory_provider", "ram" )
+		SearchConfigurationForTest cfg = new SearchConfigurationForTest()
 			.setProgrammaticMapping( mapping )
 			.addClass( Book.class );
 		exceptions.expect( SearchException.class );
-		exceptions.expectMessage( "No document id in: " + Book.class.getName() );
+		exceptions.expectMessage( "HSEARCH000177" );
 		storeBooksViaProvidedId( cfg, ProvidedId.defaultFieldName, false );
 	}
 
@@ -79,8 +63,7 @@ public class ImplicitProvidedIdTest {
 			.property( "title", ElementType.FIELD ).field()
 			.property( "text", ElementType.FIELD ).field()
 			;
-		ManualConfiguration cfg = new ManualConfiguration()
-			.addProperty( "hibernate.search.default.directory_provider", "ram" )
+		SearchConfigurationForTest cfg = new SearchConfigurationForTest()
 			.setProgrammaticMapping( mapping )
 			.setIdProvidedImplicit( true )
 			.addClass( Book.class );
@@ -97,8 +80,7 @@ public class ImplicitProvidedIdTest {
 			.property( "title", ElementType.FIELD ).field()
 			.property( "text", ElementType.FIELD ).field()
 			;
-		ManualConfiguration cfg = new ManualConfiguration()
-			.addProperty( "hibernate.search.default.directory_provider", "ram" )
+		SearchConfigurationForTest cfg = new SearchConfigurationForTest()
 			.setProgrammaticMapping( mapping )
 			.setIdProvidedImplicit( true )
 			.addClass( Book.class );
@@ -115,8 +97,7 @@ public class ImplicitProvidedIdTest {
 			.property( "title", ElementType.FIELD ).field()
 			.property( "text", ElementType.FIELD ).field()
 			;
-		ManualConfiguration cfg = new ManualConfiguration()
-			.addProperty( "hibernate.search.default.directory_provider", "ram" )
+		SearchConfigurationForTest cfg = new SearchConfigurationForTest()
 			.setProgrammaticMapping( mapping )
 			.setIdProvidedImplicit( false ) //DEFAULT
 			.addClass( Book.class );
@@ -133,8 +114,7 @@ public class ImplicitProvidedIdTest {
 			.property( "title", ElementType.FIELD ).field()
 			.property( "text", ElementType.FIELD ).field()
 			;
-		ManualConfiguration cfg = new ManualConfiguration()
-			.addProperty( "hibernate.search.default.directory_provider", "ram" )
+		SearchConfigurationForTest cfg = new SearchConfigurationForTest()
 			.setProgrammaticMapping( mapping )
 			//.setIdProvidedImplicit( false ) //Test it's the default
 			.addClass( Book.class );
@@ -149,8 +129,7 @@ public class ImplicitProvidedIdTest {
 				.property( "title", ElementType.FIELD ).documentId()
 				.property( "text", ElementType.FIELD ).field()
 			;
-		ManualConfiguration cfg = new ManualConfiguration()
-			.addProperty( "hibernate.search.default.directory_provider", "ram" )
+		SearchConfigurationForTest cfg = new SearchConfigurationForTest()
 			.setProgrammaticMapping( mapping )
 			//.setIdProvidedImplicit( false ) //Test it's the default
 			.addClass( Book.class );
@@ -161,11 +140,11 @@ public class ImplicitProvidedIdTest {
 	 * @param cfg The SearchFactory configuration to be tested
 	 * @param fieldName The expected name of the ID field
 	 */
-	private void storeBooksViaProvidedId(ManualConfiguration cfg, String fieldName, boolean matchTitle) {
-		SearchFactoryImplementor sf = null;
+	private void storeBooksViaProvidedId(SearchConfigurationForTest cfg, String fieldName, boolean matchTitle) {
+		SearchIntegrator searchIntegrator = null;
 		try {
 			//Should fail right here when @ProvidedId is not enabled:
-			sf = new SearchFactoryBuilder().configuration( cfg ).buildSearchFactory();
+			searchIntegrator = new SearchIntegratorBuilder().configuration( cfg ).buildSearchIntegrator();
 
 			Book book = new Book();
 			book.title = "Less is nice";
@@ -173,11 +152,11 @@ public class ImplicitProvidedIdTest {
 					" or a nasty exception will remind them. Can't we just assume it's always annotated?";
 			String isbn = "some entity-external id";
 			Work work = new Work( book, isbn, WorkType.ADD, false );
-			ManualTransactionContext tc = new ManualTransactionContext();
-			sf.getWorker().performWork( work, tc );
+			TransactionContextForTest tc = new TransactionContextForTest();
+			searchIntegrator.getWorker().performWork( work, tc );
 			tc.end();
 
-			QueryBuilder queryBuilder = sf.buildQueryBuilder()
+			QueryBuilder queryBuilder = searchIntegrator.buildQueryBuilder()
 					.forEntity( Book.class )
 					.get();
 
@@ -187,15 +166,15 @@ public class ImplicitProvidedIdTest {
 				.matching( matchTitle ? book.title : isbn )
 				.createQuery();
 
-			int queryResultSize = sf.createHSQuery()
+			int queryResultSize = searchIntegrator.createHSQuery()
 					.luceneQuery( query )
 					.targetedEntities( Arrays.asList( new Class<?>[]{ Book.class } ) )
 					.queryResultSize();
 			Assert.assertEquals( 1, queryResultSize );
 		}
 		finally {
-			if ( sf != null ) {
-				sf.close();
+			if ( searchIntegrator != null ) {
+				searchIntegrator.close();
 			}
 		}
 	}

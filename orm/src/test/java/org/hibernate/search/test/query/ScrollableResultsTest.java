@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.query;
 
@@ -83,7 +66,7 @@ public class ScrollableResultsTest {
 	public void testScrollingForward() {
 		Transaction tx = sess.beginTransaction();
 		TermQuery tq = new TermQuery( new Term( "summary", "number") );
-		Sort sort = new Sort( new SortField( "id", SortField.STRING ) );
+		Sort sort = new Sort( new SortField( "id", SortField.Type.STRING ) );
 		ScrollableResults scrollableResults = sess
 			.createFullTextQuery( tq, AlternateBook.class )
 			.setSort( sort )
@@ -119,7 +102,7 @@ public class ScrollableResultsTest {
 	public void testScrollingBackwards() {
 		Transaction tx = sess.beginTransaction();
 		TermQuery tq = new TermQuery( new Term( "summary", "number") );
-		Sort sort = new Sort( new SortField( "id", SortField.STRING ) );
+		Sort sort = new Sort( new SortField( "id", SortField.Type.STRING ) );
 		ScrollableResults scrollableResults = sess
 			.createFullTextQuery( tq, AlternateBook.class )
 			.setSort( sort )
@@ -150,7 +133,7 @@ public class ScrollableResultsTest {
 	public void testResultsAreManaged() {
 		Transaction tx = sess.beginTransaction();
 		TermQuery tq = new TermQuery( new Term( "summary", "number") );
-		Sort sort = new Sort( new SortField( "id", SortField.STRING ) );
+		Sort sort = new Sort( new SortField( "id", SortField.Type.STRING ) );
 		ScrollableResults scrollableResults = sess
 			.createFullTextQuery( tq, AlternateBook.class )
 			.setSort( sort )
@@ -197,7 +180,7 @@ public class ScrollableResultsTest {
 		Transaction tx = sess.beginTransaction();
 		TermQuery tq = new TermQuery( new Term( "dept", "num") );
 		//the tests relies on the results being returned sorted by id:
-		Sort sort = new Sort( new SortField( "id", SortField.STRING ) );
+		Sort sort = new Sort( new SortField( "id", SortField.Type.STRING ) );
 		ScrollableResults scrollableResults = sess
 			.createFullTextQuery( tq, Employee.class )
 			.setProjection(

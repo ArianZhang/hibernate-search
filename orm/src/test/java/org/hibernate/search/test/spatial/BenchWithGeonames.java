@@ -1,32 +1,26 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2012 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.spatial;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
 import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.QueryWrapperFilter;
-
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.hibernate.Transaction;
 import org.hibernate.cfg.Configuration;
+import org.hibernate.resource.transaction.spi.TransactionStatus;
 import org.hibernate.search.FullTextQuery;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
@@ -39,13 +33,6 @@ import org.hibernate.search.spatial.impl.Point;
 import org.hibernate.search.spatial.impl.Rectangle;
 import org.hibernate.search.spatial.impl.SpatialQueryBuilderFromCoordinates;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
-
 /**
  * Hibernate Search spatial : Benchmarks with <a href="http://www.geonames.org">GeoNames</a>
  * as data source (nearly 8M points)
@@ -54,19 +41,23 @@ import java.util.Random;
  *
  * - pure distance post filtering
  * - double numeric range
- * - quad tree
+ * - spatial hash
  * - double range + distance
- * - quad tree + distance
+ * - spatial hash + distance
  *
  * To test you must download <a href="http://download.geonames.org/export/dump/FR.zip">FR GeoBames file</a>
  * and extract it at the root directory of Hibernate Search
  *
- * @author Nicolas Helleringer <nicolas.helleringer@novacodex.net>
+ * @author Nicolas Helleringer
  */
-public class BenchWithGeonames {
+public final class BenchWithGeonames {
 
-	private static String hibernateConfigurationFile = "/org/hibernate/search/test/spatial/hibernate.cfg.xml";
-	private static String geonamesDataFile = "FR.txt";
+	private BenchWithGeonames() {
+		//not allowed
+	}
+
+	private static final String hibernateConfigurationFile = "/org/hibernate/search/test/spatial/hibernate.cfg.xml";
+	private static final String geonamesDataFile = "FR.txt";
 
 	public static void main(String args[]) {
 		LoadGeonames();
@@ -88,7 +79,7 @@ public class BenchWithGeonames {
 			fullTextSession = Search.getFullTextSession( session );
 
 			File geonamesFile = new File( geonamesDataFile );
-			buffRead = new BufferedReader( new FileReader( geonamesFile ) );
+			buffRead = new BufferedReader( new InputStreamReader( new FileInputStream( geonamesFile ), "UTF-8" ) );
 			String line = null;
 
 			int line_number = 0;
@@ -118,13 +109,13 @@ public class BenchWithGeonames {
 			sessionFactory.close();
 			buffRead.close();
 		}
-		catch ( Exception e ) {
+		catch (Exception e) {
 			e.printStackTrace();
 		}
 		finally {
 			if ( fullTextSession != null && fullTextSession.isOpen() ) {
 				Transaction transaction = fullTextSession.getTransaction();
-				if ( transaction != null && transaction.isActive() ) {
+				if ( transaction != null && transaction.getStatus() == TransactionStatus.ACTIVE ) {
 					transaction.rollback();
 				}
 				fullTextSession.close();
@@ -137,7 +128,7 @@ public class BenchWithGeonames {
 					buffRead.close();
 				}
 			}
-			catch ( Exception e ) {
+			catch (Exception e) {
 				e.printStackTrace();
 			}
 		}
@@ -155,12 +146,12 @@ public class BenchWithGeonames {
 			session.beginTransaction();
 			fullTextSession = Search.getFullTextSession( session );
 
-			long quadTreeTotalDuration = 0;
+			long spatialHashTotalDuration = 0;
 			long spatialTotalDuration = 0;
 			long doubleRangeTotalDuration = 0;
 			long distanceDoubleRangeTotalDuration = 0;
 
-			long quadTreeDocsFetched = 0;
+			long spatialHashDocsFetched = 0;
 			long spatialDocsFetched = 0;
 			long doubleRangeDocsFetched = 0;
 			long distanceDoubleRangeDocsFetched = 0;
@@ -168,7 +159,7 @@ public class BenchWithGeonames {
 			org.apache.lucene.search.Query luceneQuery;
 			long startTime, endTime, duration;
 			FullTextQuery hibQuery;
-			List quadTreeResults, rangeResults;
+			List spatialHashResults, rangeResults;
 			final QueryBuilder queryBuilder = fullTextSession.getSearchFactory().buildQueryBuilder().forEntity( POI.class ).get();
 			org.apache.lucene.search.Query query;
 			final Integer iterations = 2000;
@@ -251,24 +242,24 @@ public class BenchWithGeonames {
 				rangeResults = hibQuery.list();
 				session.clear();
 
-				luceneQuery = SpatialQueryBuilderFromCoordinates.buildQuadTreeQuery( center, radius, "location" );
+				luceneQuery = SpatialQueryBuilderFromCoordinates.buildSpatialHashQuery( center, radius, "location" );
 				hibQuery = fullTextSession.createFullTextQuery( luceneQuery, POI.class );
 				hibQuery.setProjection( "id", "name" );
 				startTime = System.nanoTime();
 
 				try {
-					quadTreeDocsFetched += hibQuery.getResultSize();
+					spatialHashDocsFetched += hibQuery.getResultSize();
 				}
 				finally {
 					endTime = System.nanoTime();
 				}
 				duration = endTime - startTime;
 				if ( i > warmUp ) {
-					quadTreeTotalDuration += duration;
+					spatialHashTotalDuration += duration;
 				}
 				session.clear();
 
-				luceneQuery = SpatialQueryBuilderFromCoordinates.buildSpatialQueryByQuadTree( center, radius, "location" );
+				luceneQuery = SpatialQueryBuilderFromCoordinates.buildSpatialQueryByHash( center, radius, "location" );
 				hibQuery = fullTextSession.createFullTextQuery( luceneQuery, POI.class );
 				hibQuery.setProjection( "id", "name" );
 				startTime = System.nanoTime();
@@ -283,10 +274,10 @@ public class BenchWithGeonames {
 				if ( i > warmUp ) {
 					spatialTotalDuration += duration;
 				}
-				quadTreeResults = hibQuery.list();
+				spatialHashResults = hibQuery.list();
 				session.clear();
 
-				if ( rangeResults.size() != quadTreeResults.size() ) {
+				if ( rangeResults.size() != spatialHashResults.size() ) {
 					luceneQuery = SpatialQueryBuilderFromCoordinates.buildDistanceQuery( center, radius, "location" );
 					hibQuery = fullTextSession.createFullTextQuery( luceneQuery, POI.class );
 					hibQuery.setProjection( "id", "name" );
@@ -300,19 +291,19 @@ public class BenchWithGeonames {
 									Double.toString( radius )
 					);
 					System.out.println( "Range results : " + rangeResults );
-					System.out.println( "Quad Tree results : " + quadTreeResults );
+					System.out.println( "Spatial Hash results : " + spatialHashResults );
 					System.out.println( "Pure distance results : " + hibQuery.getResultSize());
 
 					List<Integer> rangeIds = new ArrayList<Integer>();
 					for ( int index = 0; index < rangeResults.size(); index++ ) {
 						rangeIds.add( (Integer) ( (Object[]) rangeResults.get( index ) )[0] );
 					}
-					List<Integer> quadTreeIds = new ArrayList<Integer>();
-					for ( int index = 0; index < quadTreeResults.size(); index++ ) {
-						quadTreeIds.add( (Integer) ( (Object[]) quadTreeResults.get( index ) )[0] );
+					List<Integer> spatialHashIds = new ArrayList<Integer>();
+					for ( int index = 0; index < spatialHashResults.size(); index++ ) {
+						spatialHashIds.add( (Integer) ( (Object[]) spatialHashResults.get( index ) )[0] );
 					}
 
-					rangeIds.removeAll( quadTreeIds );
+					rangeIds.removeAll( spatialHashIds );
 
 					System.out.println( "Missing Ids : " + rangeIds );
 				}
@@ -324,37 +315,37 @@ public class BenchWithGeonames {
 
 			System.out
 					.println(
-							"Mean time with Quad Tree : " + Double.toString(
-									(double) quadTreeTotalDuration * Math.pow( 10, -6 ) / ( iterations - warmUp )
-							) + " ms. Average number of docs  fetched : " + Double.toString( quadTreeDocsFetched / ((iterations - warmUp) * 1.0d) )
+							"Mean time with Spatial Hash : " + Double.toString(
+									spatialHashTotalDuration * Math.pow( 10, -6 ) / ( iterations - warmUp )
+							) + " ms. Average number of docs fetched : " + Double.toString( spatialHashDocsFetched / ((iterations - warmUp) * 1.0d) )
 					);
 			System.out
 					.println(
-							"Mean time with Quad Tree + Distance filter : " + Double.toString(
-									(double) spatialTotalDuration * Math.pow( 10, -6 ) / ( iterations - warmUp )
-							) + " ms. Average number of docs  fetched : " + Double.toString( spatialDocsFetched / ((iterations - warmUp) * 1.0d) )
+							"Mean time with Spatial Hash + Distance filter : " + Double.toString(
+									spatialTotalDuration * Math.pow( 10, -6 ) / ( iterations - warmUp )
+							) + " ms. Average number of docs fetched : " + Double.toString( spatialDocsFetched / ((iterations - warmUp) * 1.0d) )
 					);
 			System.out
 					.println(
 							"Mean time with DoubleRange : " + Double.toString(
-									(double) doubleRangeTotalDuration * Math.pow( 10, -6 ) / (iterations - warmUp)
-							) + " ms. Average number of docs  fetched : " + Double.toString( doubleRangeDocsFetched / ((iterations - warmUp) * 1.0d) )
+									doubleRangeTotalDuration * Math.pow( 10, -6 ) / (iterations - warmUp)
+							) + " ms. Average number of docs fetched : " + Double.toString( doubleRangeDocsFetched / ((iterations - warmUp) * 1.0d) )
 					);
 			System.out
 					.println(
 							"Mean time with DoubleRange + Distance filter : " + Double.toString(
-									(double) distanceDoubleRangeTotalDuration * Math.pow( 10, -6 ) / ( iterations - warmUp )
-							) + " ms. Average number of docs  fetched : " + Double.toString( distanceDoubleRangeDocsFetched / ((iterations - warmUp) * 1.0d) )
+									distanceDoubleRangeTotalDuration * Math.pow( 10, -6 ) / ( iterations - warmUp )
+							) + " ms. Average number of docs fetched : " + Double.toString( distanceDoubleRangeDocsFetched / ((iterations - warmUp) * 1.0d) )
 					);
 
 		}
-		catch ( Exception e ) {
+		catch (Exception e) {
 			e.printStackTrace();
 		}
 		finally {
 			if ( fullTextSession != null && fullTextSession.isOpen() ) {
 				Transaction transaction = fullTextSession.getTransaction();
-				if ( transaction != null && transaction.isActive() ) {
+				if ( transaction != null && transaction.getStatus() == TransactionStatus.ACTIVE ) {
 					transaction.rollback();
 				}
 				fullTextSession.close();
@@ -385,7 +376,7 @@ public class BenchWithGeonames {
 			Point center = Point.fromDegrees( 46, 4 );
 			double radius = 50.0d;
 
-			luceneQuery = SpatialQueryBuilderFromCoordinates.buildSpatialQueryByQuadTree( center, radius, "location" );
+			luceneQuery = SpatialQueryBuilderFromCoordinates.buildSpatialQueryByHash( center, radius, "location" );
 			hibQuery = fullTextSession.createFullTextQuery( luceneQuery, POI.class );
 			hibQuery.setProjection( "id", "name", "type" );
 
@@ -415,13 +406,13 @@ public class BenchWithGeonames {
 			session.close();
 			sessionFactory.close();
 		}
-		catch ( Exception e ) {
+		catch (Exception e) {
 			e.printStackTrace();
 		}
 		finally {
 			if ( fullTextSession != null && fullTextSession.isOpen() ) {
 				Transaction transaction = fullTextSession.getTransaction();
-				if ( transaction != null && transaction.isActive() ) {
+				if ( transaction != null && transaction.getStatus() == TransactionStatus.ACTIVE ) {
 					transaction.rollback();
 				}
 				fullTextSession.close();

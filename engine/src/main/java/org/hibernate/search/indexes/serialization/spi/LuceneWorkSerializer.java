@@ -1,22 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.indexes.serialization.spi;
 
@@ -25,20 +11,29 @@ import java.util.List;
 import org.hibernate.search.backend.LuceneWork;
 
 /**
- * For clustering we need some way to serialize the LuceneWork(s)
- * to the other nodes.
+ * Serialize {@code LuceneWork} instances.
  *
- * @author Sanne Grinovero <sanne@hibernate.org> (C) 2011 Red Hat Inc.
+ * Needed for clustering where we need to serialize the work to remote nodes.
+ * <p>
+ * <b>Note</b>:<br>
+ * Implementations need to be threadsafe.
+ * </p>
+ *
+ * @author Sanne Grinovero &lt;sanne@hibernate.org&gt; (C) 2011 Red Hat Inc.
  */
 public interface LuceneWorkSerializer {
 
 	/**
-	 * Convert a List of LuceneWork into a byte[]
+	 * Convert a List of LuceneWork into a byte[].
+	 * @param works the list of {@link LuceneWork}
+	 * @return the list of {@link LuceneWork} as byte[]
 	 */
 	byte[] toSerializedModel(List<LuceneWork> works);
 
 	/**
-	 * Convert a byte[] to a List of LuceneWork
+	 * Convert a byte[] to a List of LuceneWork.
+	 * @param data the byte array to convert
+	 * @return the list of {@link LuceneWork}
 	 */
 	List<LuceneWork> toLuceneWorks(byte[] data);
 

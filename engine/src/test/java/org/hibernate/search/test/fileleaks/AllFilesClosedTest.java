@@ -1,59 +1,45 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2012 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.fileleaks;
 
 import java.io.Serializable;
 import java.util.Arrays;
 
-import junit.framework.Assert;
-
+import org.junit.Assert;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.hibernate.search.annotations.DocumentId;
 import org.hibernate.search.annotations.Field;
 import org.hibernate.search.annotations.Indexed;
 import org.hibernate.search.backend.spi.Work;
 import org.hibernate.search.backend.spi.WorkType;
-import org.hibernate.search.engine.spi.SearchFactoryImplementor;
-import org.hibernate.search.indexes.impl.DirectoryBasedIndexManager;
+import org.hibernate.search.engine.integration.impl.ExtendedSearchIntegrator;
+import org.hibernate.search.indexes.spi.DirectoryBasedIndexManager;
 import org.hibernate.search.query.engine.spi.HSQuery;
-import org.hibernate.search.spi.SearchFactoryBuilder;
-import org.hibernate.search.test.util.ManualConfiguration;
-import org.hibernate.search.test.util.ManualTransactionContext;
-import org.hibernate.search.test.util.leakdetection.FileMonitoringDirectory;
-import org.hibernate.search.test.util.leakdetection.FileMonitoringDirectoryProvider;
+import org.hibernate.search.spi.SearchIntegratorBuilder;
+import org.hibernate.search.spi.SearchIntegrator;
+import org.hibernate.search.testsupport.setup.SearchConfigurationForTest;
+import org.hibernate.search.testsupport.setup.TransactionContextForTest;
+import org.hibernate.search.testsupport.leakdetection.FileMonitoringDirectory;
+import org.hibernate.search.testsupport.leakdetection.FileMonitoringDirectoryProvider;
 import org.junit.Test;
 
 /**
  * Test for HSEARCH-1090: IndexReader leaks file handles on close
  *
- * @author Sanne Grinovero <sanne@hibernate.org> (C) 2012 Red Hat Inc.
+ * @author Sanne Grinovero (C) 2012 Red Hat Inc.
  */
 public class AllFilesClosedTest {
 
-	private SearchFactoryImplementor searchFactory;
+	private SearchIntegrator searchIntegrator;
 
 	@Test
 	public void testFileHandlesReleased() {
 		//We initialize the SearchFactory in the test itself as we want to test it's state *after* shutdown
-		searchFactory = initializeSearchFactory();
+		searchIntegrator = initializeSearchFactory();
 		//extract the directories now, as they won't be available after SearchFactory#close :
 		FileMonitoringDirectory directoryOne = getDirectory( "index1" );
 		FileMonitoringDirectory directoryTwo = getDirectory( "index2" );
@@ -67,7 +53,7 @@ public class AllFilesClosedTest {
 			// directoryOne is using resource pooling
 		}
 		finally {
-			searchFactory.close();
+			searchIntegrator.close();
 		}
 		assertAllFilesClosed( directoryOne );
 		assertAllFilesClosed( directoryTwo );
@@ -104,7 +90,8 @@ public class AllFilesClosedTest {
 	}
 
 	private FileMonitoringDirectory getDirectory(String indexName) {
-		DirectoryBasedIndexManager indexManager = (DirectoryBasedIndexManager) searchFactory.getIndexManagerHolder().getIndexManager( indexName );
+		ExtendedSearchIntegrator implementor = searchIntegrator.unwrap( ExtendedSearchIntegrator.class );
+		DirectoryBasedIndexManager indexManager = (DirectoryBasedIndexManager) implementor.getIndexManagerHolder().getIndexManager( indexName );
 		FileMonitoringDirectoryProvider directoryProvider = (FileMonitoringDirectoryProvider) indexManager.getDirectoryProvider();
 		FileMonitoringDirectory directory = (FileMonitoringDirectory) directoryProvider.getDirectory();
 		return directory;
@@ -131,7 +118,7 @@ public class AllFilesClosedTest {
 	 * @param expected number of elements found in the index
 	 */
 	private void assertElementsInIndex(int expected) {
-		HSQuery hsQuery = searchFactory.createHSQuery();
+		HSQuery hsQuery = searchIntegrator.createHSQuery();
 		hsQuery
 			.luceneQuery( new MatchAllDocsQuery() )
 			.targetedEntities( Arrays.asList( new Class<?>[]{ Book.class, Dvd.class } ) );
@@ -155,13 +142,13 @@ public class AllFilesClosedTest {
 
 	private void storeObject(Object entity, Serializable id) {
 		Work work = new Work( entity, id, WorkType.UPDATE, false );
-		ManualTransactionContext tc = new ManualTransactionContext();
-		searchFactory.getWorker().performWork( work, tc );
+		TransactionContextForTest tc = new TransactionContextForTest();
+		searchIntegrator.getWorker().performWork( work, tc );
 		tc.end();
 	}
 
-	protected SearchFactoryImplementor initializeSearchFactory() {
-		ManualConfiguration cfg = new ManualConfiguration()
+	protected SearchIntegrator initializeSearchFactory() {
+		SearchConfigurationForTest cfg = new SearchConfigurationForTest()
 			.addProperty( "hibernate.search.default.directory_provider", FileMonitoringDirectoryProvider.class.getName() )
 			.addProperty( "hibernate.search.default.reader.strategy", "shared" )
 			.addProperty( "hibernate.search.index2.reader.strategy", "not-shared" ) //close all readers closed aggressively
@@ -170,12 +157,12 @@ public class AllFilesClosedTest {
 			.addClass( Dvd.class )
 			;
 		overrideProperties( cfg ); //allow extending tests with different configuration
-		return new SearchFactoryBuilder()
+		return new SearchIntegratorBuilder()
 			.configuration( cfg )
-			.buildSearchFactory();
+			.buildSearchIntegrator();
 	}
 
-	protected void overrideProperties(ManualConfiguration cfg) {
+	protected void overrideProperties(SearchConfigurationForTest cfg) {
 		//nothing to do
 	}
 

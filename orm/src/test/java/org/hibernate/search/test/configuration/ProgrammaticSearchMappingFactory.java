@@ -1,37 +1,18 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.configuration;
 
 import java.lang.annotation.ElementType;
 
-import org.apache.lucene.search.DefaultSimilarity;
-import org.apache.solr.analysis.GermanStemFilterFactory;
-import org.apache.solr.analysis.LowerCaseFilterFactory;
-import org.apache.solr.analysis.NGramFilterFactory;
-import org.apache.solr.analysis.SnowballPorterFilterFactory;
-import org.apache.solr.analysis.StandardTokenizerFactory;
-
+import org.apache.lucene.analysis.core.LowerCaseFilterFactory;
+import org.apache.lucene.analysis.de.GermanStemFilterFactory;
+import org.apache.lucene.analysis.ngram.NGramFilterFactory;
+import org.apache.lucene.analysis.snowball.SnowballPorterFilterFactory;
+import org.apache.lucene.analysis.standard.StandardTokenizerFactory;
 import org.hibernate.search.annotations.Analyze;
 import org.hibernate.search.annotations.Factory;
 import org.hibernate.search.annotations.FilterCacheModeType;
@@ -63,7 +44,6 @@ public class ProgrammaticSearchMappingFactory {
 					.filter( GermanStemFilterFactory.class )
 				.entity( Address.class )
 					.indexed()
-					.similarity( DefaultSimilarity.class )
 					.boost( 2 )
 					.classBridge( AddressClassBridge.class )
 					.analyzer( "english" )
@@ -74,7 +54,7 @@ public class ProgrammaticSearchMappingFactory {
 								.calendarBridge( Resolution.DAY )
 					.property( "dateCreated", ElementType.FIELD )
 						.field().name( "date-created" ).index( Index.YES )
-								.analyzer( "en" ).store( Store.YES )
+								.store( Store.YES )
 								.dateBridge( Resolution.DAY )
 					.property( "owner", ElementType.FIELD )
 						.field()
@@ -95,22 +75,30 @@ public class ProgrammaticSearchMappingFactory {
 						.property( "age", ElementType.FIELD )
 							.field().name( "providedidentry.age" ).analyzer( "en" ).index( Index.YES ).store( Store.YES )
 				.entity( ProductCatalog.class ).indexed()
-					.similarity( DefaultSimilarity.class )
 					.boost( 2 )
 					.property( "id", ElementType.FIELD ).documentId().name( "id" )
 					.property( "name", ElementType.FIELD )
 						.field().name( "productCatalogName" ).index( Index.YES ).analyzer( "en" ).store( Store.YES )
 					.property( "items", ElementType.FIELD )
 						.indexEmbedded()
+							.includeEmbeddedObjectId( true )
 				.entity( Item.class )
 					.indexed()
+					.property( "id", ElementType.FIELD )
+						.documentId()
+							.sortableField()
 					.property( "description", ElementType.FIELD )
 						.field().name( "description" ).analyzer( "en" ).index( Index.YES ).store( Store.YES )
 					.property( "productCatalog", ElementType.FIELD )
 						.containedIn()
 					.property( "price", ElementType.FIELD )
 						.field()
-						.numericField().precisionStep( 10 )
+							.store( Store.YES )
+							.numericField().precisionStep( 10 )
+							.sortableField()
+						.field()
+							.name( "price_string" )
+							.store( Store.YES )
 				.entity( DynamicBoostedDescLibrary.class )
 					.dynamicBoost( CustomBoostStrategy.class )
 					.indexed()
@@ -154,24 +142,30 @@ public class ProgrammaticSearchMappingFactory {
 					.property( "dateCreated", ElementType.METHOD )
 						.field()
 							.name( "blog-entry-created" )
-								.analyzer( "en" )
 								.store( Store.YES )
 								.dateBridge( Resolution.DAY )
 				.entity( MemberLevelTestPoI.class ).indexed()
 					.property( "name", ElementType.METHOD )
 						.field()
 					.property( "location", ElementType.METHOD )
-						.spatial().spatialMode( SpatialMode.GRID )
+						.spatial().spatialMode( SpatialMode.HASH )
 				.entity( ClassLevelTestPoI.class ).indexed()
-					.spatial().name( "location" ).spatialMode( SpatialMode.GRID )
+					.spatial().name( "location" ).spatialMode( SpatialMode.HASH )
 					.property( "name", ElementType.METHOD )
 						.field()
 				.entity( LatLongAnnTestPoi.class ).indexed()
-					.spatial().name(  "location" )
-					.property(  "latitude", ElementType.FIELD )
+					.spatial().name( "location" )
+					.property( "latitude", ElementType.FIELD )
 						.latitude().name( "location" )
-					.property(  "longitude", ElementType.FIELD )
+					.property( "longitude", ElementType.FIELD )
 						.longitude().name( "location" )
+				.entity( OrderLine.class ).indexed()
+					.classBridgeInstance( new OrderLineClassBridge( "orderLineName" ) )
+					.classBridgeInstance( new OrderLineClassBridge( null ) )
+						.name( "orderLineName_ngram" )
+						.analyzer( "ngram" )
+					.classBridgeInstance( new OrderLineClassBridge( null ) )
+						.param( "fieldName", "orderLineNameViaParam" )
 		;
 
 		return mapping;

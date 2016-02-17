@@ -1,29 +1,13 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.exception.impl;
 
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 
 import org.hibernate.search.backend.LuceneWork;
@@ -36,28 +20,33 @@ import org.hibernate.search.exception.ErrorContext;
 public class ErrorContextBuilder {
 
 	private Throwable th;
-	private List<LuceneWork> workToBeDone;
-	private List<LuceneWork> failingOperations = new ArrayList<LuceneWork>();
-	private List<LuceneWork> operationsThatWorked = new ArrayList<LuceneWork>();
+	private Iterable<LuceneWork> workToBeDone;
+	private List<LuceneWork> failingOperations;
+	private List<LuceneWork> operationsThatWorked;
 
 	public ErrorContextBuilder errorThatOccurred(Throwable th) {
 		this.th = th;
 		return this;
 	}
 
+	public ErrorContextBuilder addWorkThatFailed(LuceneWork failedWork) {
+		this.getFailingOperations().add( failedWork );
+		return this;
+	}
+
 	public ErrorContextBuilder addAllWorkThatFailed(List<LuceneWork> worksThatFailed) {
-		this.failingOperations.addAll( worksThatFailed );
+		this.getFailingOperations().addAll( worksThatFailed );
 		return this;
 	}
 
 	public ErrorContextBuilder workCompleted(LuceneWork luceneWork) {
-		this.operationsThatWorked.add( luceneWork );
+		this.getOperationsThatWorked().add( luceneWork );
 		return this;
 
 	}
 
-	public ErrorContextBuilder allWorkToBeDone(List<LuceneWork> workOnWriter) {
-		this.workToBeDone = new ArrayList<LuceneWork>( workOnWriter );
+	public ErrorContextBuilder allWorkToBeDone(Iterable<LuceneWork> workOnWriter) {
+		this.workToBeDone = workOnWriter;
 		return this;
 	}
 
@@ -68,18 +57,35 @@ public class ErrorContextBuilder {
 
 		// for situation when there is a primary failure
 		if ( workToBeDone != null ) {
-			List<LuceneWork> workLeft = new ArrayList<LuceneWork>( workToBeDone );
-			if ( !operationsThatWorked.isEmpty() ) {
+			List<LuceneWork> workLeft = new ArrayList<LuceneWork>();
+			for ( LuceneWork work : workToBeDone ) {
+				workLeft.add( work );
+			}
+			if ( operationsThatWorked != null ) {
 				workLeft.removeAll( operationsThatWorked );
 			}
 
 			if ( !workLeft.isEmpty() ) {
 				context.setOperationAtFault( workLeft.remove( 0 ) );
-				failingOperations.addAll( workLeft );
+				getFailingOperations().addAll( workLeft );
 			}
 		}
-		context.setFailingOperations( failingOperations );
+		context.setFailingOperations( getFailingOperations() );
 		return context;
+	}
+
+	private List<LuceneWork> getFailingOperations() {
+		if ( failingOperations == null ) {
+			failingOperations = new ArrayList<LuceneWork>();
+		}
+		return failingOperations;
+	}
+
+	private List<LuceneWork> getOperationsThatWorked() {
+		if ( operationsThatWorked == null ) {
+			operationsThatWorked = new LinkedList<LuceneWork>();
+		}
+		return operationsThatWorked;
 	}
 
 }

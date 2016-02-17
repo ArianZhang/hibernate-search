@@ -1,41 +1,28 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.batchindexing.impl;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-
-import org.hibernate.search.engine.spi.SearchFactoryImplementor;
-import org.hibernate.search.exception.ErrorHandler;
-import org.hibernate.search.util.logging.impl.Log;
+import java.util.concurrent.Future;
 
 import org.hibernate.CacheMode;
-import org.hibernate.SessionFactory;
+import org.hibernate.engine.spi.SessionFactoryImplementor;
 import org.hibernate.search.backend.PurgeAllLuceneWork;
-import org.hibernate.search.backend.impl.batch.BatchBackend;
+import org.hibernate.search.backend.spi.BatchBackend;
 import org.hibernate.search.batchindexing.MassIndexerProgressMonitor;
+import org.hibernate.search.engine.integration.impl.ExtendedSearchIntegrator;
+import org.hibernate.search.exception.AssertionFailure;
+import org.hibernate.search.util.impl.Executors;
+import org.hibernate.search.util.logging.impl.Log;
 import org.hibernate.search.util.logging.impl.LoggerFactory;
 
 /**
@@ -45,15 +32,14 @@ import org.hibernate.search.util.logging.impl.LoggerFactory;
  *
  * @author Sanne Grinovero
  */
-public class BatchCoordinator implements Runnable {
+public class BatchCoordinator extends ErrorHandledRunnable {
 
 	private static final Log log = LoggerFactory.make();
 
 	private final Class<?>[] rootEntities; //entity types to reindex excluding all subtypes of each-other
-	private final SearchFactoryImplementor searchFactoryImplementor;
-	private final SessionFactory sessionFactory;
-	private final int objectLoadingThreads;
-	private final int collectionLoadingThreads;
+	private final SessionFactoryImplementor sessionFactory;
+	private final int typesToIndexInParallel;
+	private final int documentBuilderThreads;
 	private final CacheMode cacheMode;
 	private final int objectLoadingBatchSize;
 	private final boolean optimizeAtEnd;
@@ -62,14 +48,16 @@ public class BatchCoordinator implements Runnable {
 	private final CountDownLatch endAllSignal;
 	private final MassIndexerProgressMonitor monitor;
 	private final long objectsLimit;
-	private final ErrorHandler errorHandler;
 	private final int idFetchSize;
+	private final Integer transactionTimeout;
+	private final String tenantId;
+	private final List<Future<?>> indexingTasks = new ArrayList<>();
 
 	public BatchCoordinator(Set<Class<?>> rootEntities,
-							SearchFactoryImplementor searchFactoryImplementor,
-							SessionFactory sessionFactory,
-							int objectLoadingThreads,
-							int collectionLoadingThreads,
+							ExtendedSearchIntegrator extendedIntegrator,
+							SessionFactoryImplementor sessionFactory,
+							int typesToIndexInParallel,
+							int documentBuilderThreads,
 							CacheMode cacheMode,
 							int objectLoadingBatchSize,
 							long objectsLimit,
@@ -77,13 +65,17 @@ public class BatchCoordinator implements Runnable {
 							boolean purgeAtStart,
 							boolean optimizeAfterPurge,
 							MassIndexerProgressMonitor monitor,
-							int idFetchSize) {
+							int idFetchSize,
+							Integer transactionTimeout,
+							String tenantId) {
+		super( extendedIntegrator );
 		this.idFetchSize = idFetchSize;
+		this.transactionTimeout = transactionTimeout;
+		this.tenantId = tenantId;
 		this.rootEntities = rootEntities.toArray( new Class<?>[rootEntities.size()] );
-		this.searchFactoryImplementor = searchFactoryImplementor;
 		this.sessionFactory = sessionFactory;
-		this.objectLoadingThreads = objectLoadingThreads;
-		this.collectionLoadingThreads = collectionLoadingThreads;
+		this.typesToIndexInParallel = typesToIndexInParallel;
+		this.documentBuilderThreads = documentBuilderThreads;
 		this.cacheMode = cacheMode;
 		this.objectLoadingBatchSize = objectLoadingBatchSize;
 		this.optimizeAtEnd = optimizeAtEnd;
@@ -92,30 +84,36 @@ public class BatchCoordinator implements Runnable {
 		this.monitor = monitor;
 		this.objectsLimit = objectsLimit;
 		this.endAllSignal = new CountDownLatch( rootEntities.size() );
-		this.errorHandler = searchFactoryImplementor.getErrorHandler();
 	}
 
-	public void run() {
-		try {
-			final BatchBackend backend = searchFactoryImplementor.makeBatchBackend( monitor );
-			try {
-				beforeBatch( backend ); // purgeAll and pre-optimize activities
-				doBatchWork( backend );
-				afterBatch( backend );
-			}
-			catch ( InterruptedException e ) {
-				log.interruptedBatchIndexing();
-				Thread.currentThread().interrupt();
-			}
-			finally {
-				monitor.indexingCompleted();
-			}
+	@Override
+	public void runWithErrorHandler() {
+		final BatchBackend backend = extendedIntegrator.makeBatchBackend( monitor );
+		if ( indexingTasks.size() > 0 ) {
+			throw new AssertionFailure( "BatchCoordinator instance not expected to be reused - indexingTasks should be empty" );
 		}
-		catch (RuntimeException re) {
-			// each batch processing stage is already supposed to properly handle any kind
-			// of exception, still since this is possibly an async operation we need a safety
-			// for the unexpected exceptions
-			errorHandler.handleException( log.massIndexerUnexpectedErrorMessage() , re );
+		try {
+			beforeBatch( backend ); // purgeAll and pre-optimize activities
+			doBatchWork( backend );
+			afterBatch( backend );
+		}
+		catch (InterruptedException | ExecutionException e) {
+			log.interruptedBatchIndexing();
+			// on thread interruption cancel each pending task - thread executing the task must be interrupted
+			for ( Future<?> task : indexingTasks ) {
+				if ( !task.isDone() ) {
+					task.cancel( true );
+				}
+			}
+			// try afterBatch stuff - indexation realized before interruption will be commited - index should be in a
+			// coherent state (not corrupted)
+			afterBatchOnInterruption( backend );
+
+			// restore interruption signal:
+			Thread.currentThread().interrupt();
+		}
+		finally {
+			monitor.indexingCompleted();
 		}
 	}
 
@@ -125,18 +123,14 @@ public class BatchCoordinator implements Runnable {
 	 * @param backend
 	 *
 	 * @throws InterruptedException if interrupted while waiting for endAllSignal.
+	 * @throws ExecutionException
 	 */
-	private void doBatchWork(BatchBackend backend) throws InterruptedException {
-		ExecutorService executor = Executors.newFixedThreadPool( rootEntities.length, "BatchIndexingWorkspace" );
+	private void doBatchWork(BatchBackend backend) throws InterruptedException, ExecutionException {
+		ExecutorService executor = Executors.newFixedThreadPool( typesToIndexInParallel, "BatchIndexingWorkspace" );
 		for ( Class<?> type : rootEntities ) {
-			executor.execute(
-					new BatchIndexingWorkspace(
-							searchFactoryImplementor, sessionFactory, type,
-							objectLoadingThreads, collectionLoadingThreads,
-							cacheMode, objectLoadingBatchSize, endAllSignal,
-							monitor, backend, objectsLimit, idFetchSize
-					)
-			);
+			indexingTasks.add( executor.submit( new BatchIndexingWorkspace( extendedIntegrator, sessionFactory, type, documentBuilderThreads, cacheMode,
+					objectLoadingBatchSize, endAllSignal, monitor, backend, objectsLimit, idFetchSize, transactionTimeout, tenantId ) ) );
+
 		}
 		executor.shutdown();
 		endAllSignal.await(); //waits for the executor to finish
@@ -147,10 +141,20 @@ public class BatchCoordinator implements Runnable {
 	 * @param backend
 	 */
 	private void afterBatch(BatchBackend backend) {
-		Set<Class<?>> targetedClasses = searchFactoryImplementor.getIndexedTypesPolymorphic( rootEntities );
+		Set<Class<?>> targetedClasses = extendedIntegrator.getIndexedTypesPolymorphic( rootEntities );
 		if ( this.optimizeAtEnd ) {
 			backend.optimize( targetedClasses );
 		}
+		backend.flush( targetedClasses );
+	}
+
+	/**
+	 * batch indexing has been interrupted : flush to apply all index update realized before interruption
+	 *
+	 * @param backend
+	 */
+	private void afterBatchOnInterruption(BatchBackend backend) {
+		Set<Class<?>> targetedClasses = extendedIntegrator.getIndexedTypesPolymorphic( rootEntities );
 		backend.flush( targetedClasses );
 	}
 
@@ -161,10 +165,10 @@ public class BatchCoordinator implements Runnable {
 	private void beforeBatch(BatchBackend backend) {
 		if ( this.purgeAtStart ) {
 			//purgeAll for affected entities
-			Set<Class<?>> targetedClasses = searchFactoryImplementor.getIndexedTypesPolymorphic( rootEntities );
+			Set<Class<?>> targetedClasses = extendedIntegrator.getIndexedTypesPolymorphic( rootEntities );
 			for ( Class<?> clazz : targetedClasses ) {
 				//needs do be in-sync work to make sure we wait for the end of it.
-				backend.doWorkInSync( new PurgeAllLuceneWork( clazz ) );
+				backend.doWorkInSync( new PurgeAllLuceneWork( tenantId, clazz ) );
 			}
 			if ( this.optimizeAfterPurge ) {
 				backend.optimize( targetedClasses );

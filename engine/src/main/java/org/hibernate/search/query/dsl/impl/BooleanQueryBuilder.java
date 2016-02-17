@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.query.dsl.impl;
@@ -28,19 +11,24 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.BooleanClause.Occur;
+import org.apache.lucene.search.BooleanQuery.Builder;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
 
-import org.hibernate.annotations.common.AssertionFailure;
+import org.hibernate.search.exception.AssertionFailure;
 import org.hibernate.search.query.dsl.BooleanJunction;
 import org.hibernate.search.query.dsl.MustJunction;
+import org.hibernate.search.util.logging.impl.Log;
+import org.hibernate.search.util.logging.impl.LoggerFactory;
 
 /**
  * @author Emmanuel Bernard
  */
 class BooleanQueryBuilder implements MustJunction {
+
+	private static final Log log = LoggerFactory.make();
 
 	private final List<BooleanClause> clauses;
 	private final QueryCustomizer queryCustomizer;
@@ -50,63 +38,83 @@ class BooleanQueryBuilder implements MustJunction {
 		queryCustomizer = new QueryCustomizer();
 	}
 
+	@Override
 	public BooleanJunction not() {
-		final int lastIndex = clauses.size() - 1;
-		final BooleanClause last = clauses.get( lastIndex );
-		if ( ! last.getOccur().equals( BooleanClause.Occur.MUST ) ) {
-			throw new AssertionFailure( "Cannot negate class: " + last.getOccur() );
-		}
-		clauses.set( lastIndex, new BooleanClause( last.getQuery(), BooleanClause.Occur.MUST_NOT ) );
+		replaceLastMustWith( BooleanClause.Occur.MUST_NOT );
 		return this;
 	}
 
+	@Override
+	public BooleanJunction disableScoring() {
+		replaceLastMustWith( BooleanClause.Occur.FILTER );
+		return this;
+	}
+
+	private void replaceLastMustWith(Occur replacementOccur) {
+		final int lastIndex = clauses.size() - 1;
+		final BooleanClause last = clauses.get( lastIndex );
+		if ( ! last.getOccur().equals( BooleanClause.Occur.MUST ) ) {
+			throw new AssertionFailure( "Cannot negate or disable scoring on class: " + last.getOccur() );
+		}
+		clauses.set( lastIndex, new BooleanClause( last.getQuery(), replacementOccur ) );
+	}
+
+	@Override
 	public BooleanJunction should(Query query) {
 		clauses.add( new BooleanClause( query, BooleanClause.Occur.SHOULD ) );
 		return this;
 	}
 
+	@Override
 	public MustJunction must(Query query) {
 		clauses.add( new BooleanClause( query, BooleanClause.Occur.MUST ) );
 		return this;
 	}
 
+	@Override
 	public MustJunction boostedTo(float boost) {
 		queryCustomizer.boostedTo( boost );
 		return this;
 	}
 
+	@Override
 	public MustJunction withConstantScore() {
 		queryCustomizer.withConstantScore();
 		return this;
 	}
 
+	@Override
 	public MustJunction filteredBy(Filter filter) {
 		queryCustomizer.filteredBy( filter );
 		return this;
 	}
 
+	@Override
 	public Query createQuery() {
 		final int nbrOfClauses = clauses.size();
-		if ( nbrOfClauses == 0) {
-			throw new AssertionFailure( "Cannot create an empty boolean query" );
-		}
-		else if ( nbrOfClauses == 1 ) {
-			final BooleanClause uniqueClause = clauses.get( 0 );
-			if ( uniqueClause.getOccur().equals( BooleanClause.Occur.MUST_NOT ) ) {
-				//FIXME We have two choices here, raise an exception or combine with an All query. #2 is done atm.
-				//TODO which normfield to use and how to pass it?
-				should( new MatchAllDocsQuery() );
-			}
-			else {
-				//optimize
-				return queryCustomizer.setWrappedQuery( uniqueClause.getQuery() ).createQuery();
-			}
+		if ( nbrOfClauses == 0 ) {
+			throw log.booleanQueryWithoutClauses();
 		}
 
-		BooleanQuery query = new BooleanQuery();
+		Builder builder = new org.apache.lucene.search.BooleanQuery.Builder();
+		boolean allClausesAreMustNot = true;
 		for ( BooleanClause clause : clauses ) {
-			query.add( clause );
+			if ( clause.getOccur() != Occur.MUST_NOT ) {
+				allClausesAreMustNot = false;
+			}
+			builder.add( clause );
 		}
-		return queryCustomizer.setWrappedQuery( query ).createQuery();
+		if ( allClausesAreMustNot ) {
+			//It is illegal to have only must-not queries,
+			//in this case we need to add a positive clause to match everything else.
+			builder.add( new MatchAllDocsQuery(), Occur.FILTER );
+		}
+		return queryCustomizer.setWrappedQuery( builder.build() ).createQuery();
 	}
+
+	@Override
+	public boolean isEmpty() {
+		return clauses.isEmpty();
+	}
+
 }

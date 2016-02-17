@@ -1,33 +1,18 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.jmx;
 
-import java.io.File;
 import java.lang.management.ManagementFactory;
+import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Hashtable;
+import java.util.Map;
 import java.util.Set;
+
 import javax.management.InstanceNotFoundException;
 import javax.management.MBeanAttributeInfo;
 import javax.management.MBeanException;
@@ -40,26 +25,30 @@ import javax.naming.Context;
 import javax.naming.NamingException;
 import javax.naming.spi.InitialContextFactory;
 
-import org.osjava.sj.memory.MemoryContext;
-
 import org.hibernate.Transaction;
-import org.hibernate.cfg.Configuration;
-import org.hibernate.search.Environment;
+import org.hibernate.search.cfg.Environment;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
 import org.hibernate.search.jmx.IndexControlMBean;
 import org.hibernate.search.jmx.StatisticsInfoMBean;
-import org.hibernate.search.test.SearchTestCase;
-import org.hibernate.search.test.TestConstants;
+import org.hibernate.search.test.SearchTestBase;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.osjava.sj.memory.MemoryContext;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 /**
  * @author Hardy Ferentschik
  */
-public class IndexControlMBeanTest extends SearchTestCase {
+public class IndexControlMBeanTest extends SearchTestBase {
 	MBeanServer mbeanServer;
 	ObjectName statisticsBeanObjectName;
 	ObjectName indexBeanObjectName;
 
+	@Test
 	public void testIndexCtrlMBeanRegistered() throws Exception {
 		assertTrue(
 				"With the right property set the Search MBean should be registered",
@@ -67,6 +56,7 @@ public class IndexControlMBeanTest extends SearchTestCase {
 		);
 	}
 
+	@Test
 	public void testAttributesAndOperations() throws Exception {
 		MBeanInfo info = mbeanServer.getMBeanInfo( indexBeanObjectName );
 		MBeanAttributeInfo[] attributes = info.getAttributes();
@@ -90,6 +80,7 @@ public class IndexControlMBeanTest extends SearchTestCase {
 		}
 	}
 
+	@Test
 	public void testIndexAndPurge() throws Exception {
 		FullTextSession s = Search.getFullTextSession( openSession() );
 		Transaction tx = s.beginTransaction();
@@ -120,8 +111,8 @@ public class IndexControlMBeanTest extends SearchTestCase {
 	}
 
 	@Override
+	@Before
 	public void setUp() throws Exception {
-		setCfg( null ); // force a rebuild of the configuration
 		super.setUp();
 		mbeanServer = ManagementFactory.getPlatformMBeanServer();
 		statisticsBeanObjectName = new ObjectName( StatisticsInfoMBean.STATISTICS_MBEAN_OBJECT_NAME );
@@ -129,6 +120,7 @@ public class IndexControlMBeanTest extends SearchTestCase {
 	}
 
 	@Override
+	@After
 	public void tearDown() throws Exception {
 		super.tearDown();
 		if ( mbeanServer.isRegistered( statisticsBeanObjectName ) ) {
@@ -140,24 +132,17 @@ public class IndexControlMBeanTest extends SearchTestCase {
 	}
 
 	@Override
-	protected void configure(Configuration cfg) {
-		super.configure( cfg );
-		File targetDir = TestConstants.getTargetDir( IndexControlMBeanTest.class );
-		File simpleJndiDir = new File( targetDir, "simpleJndi" );
-		simpleJndiDir.mkdir();
-
-		cfg.setProperty( "hibernate.session_factory_name", "java:comp/SessionFactory" );
-		cfg.setProperty( "hibernate.jndi.class", "org.osjava.sj.SimpleContextFactory" );
-		cfg.setProperty( "hibernate.jndi.org.osjava.sj.factory", "org.hibernate.search.test.jmx.IndexControlMBeanTest$CustomContextFactory" );
-		cfg.setProperty( "hibernate.jndi.org.osjava.sj.root", simpleJndiDir.getAbsolutePath() );
-		cfg.setProperty( "hibernate.jndi.org.osjava.sj.jndi.shared", "true" );
-
-		cfg.setProperty( "hibernate.search.indexing_strategy", "manual" );
-		cfg.setProperty( Environment.JMX_ENABLED, "true" );
+	public void configure(Map<String,Object> cfg) {
+		Path simpleJndiDir = SimpleJNDIHelper.makeTestingJndiDirectory( IndexControlMBeanTest.class );
+		SimpleJNDIHelper.enableSimpleJndi( cfg, simpleJndiDir );
+		cfg.put( "hibernate.session_factory_name", "java:comp/SessionFactory" );
+		cfg.put( "hibernate.jndi.org.osjava.sj.factory", "org.hibernate.search.test.jmx.IndexControlMBeanTest$CustomContextFactory" );
+		cfg.put( "hibernate.search.indexing_strategy", "manual" );
+		cfg.put( Environment.JMX_ENABLED, "true" );
 	}
 
 	@Override
-	protected Class<?>[] getAnnotatedClasses() {
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class<?>[] { Counter.class };
 	}
 
@@ -179,6 +164,7 @@ public class IndexControlMBeanTest extends SearchTestCase {
 			super();
 		}
 
+		@Override
 		public Context getInitialContext(Hashtable environment) throws NamingException {
 			return new CloseNoOpMemoryContext( environment );
 		}

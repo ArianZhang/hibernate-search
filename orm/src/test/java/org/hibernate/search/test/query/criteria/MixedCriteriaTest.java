@@ -1,49 +1,39 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.query.criteria;
 
 import java.util.List;
 
-import org.apache.lucene.queryParser.MultiFieldQueryParser;
+import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
 import org.apache.lucene.search.Query;
+
 import org.hibernate.Criteria;
 import org.hibernate.Session;
 import org.hibernate.Transaction;
+
 import org.hibernate.criterion.Restrictions;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.SearchException;
-import org.hibernate.search.test.SearchTestCase;
-import org.hibernate.search.test.TestConstants;
+import org.hibernate.search.exception.SearchException;
+import org.hibernate.search.test.SearchTestBase;
+import org.hibernate.search.testsupport.TestConstants;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 /**
  * @author Hardy Ferentschik
  */
-public class MixedCriteriaTest extends SearchTestCase {
+public class MixedCriteriaTest extends SearchTestBase {
 	/**
 	 * HSEARCH-360
 	 */
+	@Test
 	public void testCriteriaWithFilteredEntity() throws Exception {
 		indexTestData();
 
@@ -52,7 +42,7 @@ public class MixedCriteriaTest extends SearchTestCase {
 		Transaction tx = session.beginTransaction();
 		FullTextSession fullTextSession = Search.getFullTextSession( session );
 
-		MultiFieldQueryParser parser = new MultiFieldQueryParser( TestConstants.getTargetLuceneVersion(),
+		MultiFieldQueryParser parser = new MultiFieldQueryParser(
 				new String[] { "kurztext" }, TestConstants.standardAnalyzer
 		);
 		Query query = parser.parse( "combi OR sport" );
@@ -68,6 +58,7 @@ public class MixedCriteriaTest extends SearchTestCase {
 		session.close();
 	}
 
+	@Test
 	public void testCriteriaWithoutFilteredEntity() throws Exception {
 		indexTestData();
 
@@ -76,9 +67,7 @@ public class MixedCriteriaTest extends SearchTestCase {
 		Transaction tx = session.beginTransaction();
 		FullTextSession fullTextSession = Search.getFullTextSession( session );
 
-		MultiFieldQueryParser parser = new MultiFieldQueryParser( TestConstants.getTargetLuceneVersion(),
-				new String[] { "kurztext" }, TestConstants.standardAnalyzer
-		);
+		MultiFieldQueryParser parser = new MultiFieldQueryParser( new String[] { "kurztext" }, TestConstants.standardAnalyzer );
 		Query query = parser.parse( "combi OR sport" );
 
 		Criteria criteria = session.createCriteria( AbstractCar.class );
@@ -92,6 +81,7 @@ public class MixedCriteriaTest extends SearchTestCase {
 		session.close();
 	}
 
+	@Test
 	public void testCriteriaWithMultipleEntities() throws Exception {
 		indexTestData();
 
@@ -100,7 +90,7 @@ public class MixedCriteriaTest extends SearchTestCase {
 		Transaction tx = session.beginTransaction();
 		FullTextSession fullTextSession = Search.getFullTextSession( session );
 
-		MultiFieldQueryParser parser = new MultiFieldQueryParser( TestConstants.getTargetLuceneVersion(),
+		MultiFieldQueryParser parser = new MultiFieldQueryParser(
 				new String[] { "kurztext" }, TestConstants.standardAnalyzer
 		);
 		Query query = parser.parse( "combi OR sport" );
@@ -114,7 +104,7 @@ public class MixedCriteriaTest extends SearchTestCase {
 			hibQuery.list();
 			fail();
 		}
-		catch ( SearchException se ) {
+		catch (SearchException se) {
 			assertEquals( "Cannot mix criteria and multiple entity types", se.getMessage() );
 		}
 		tx.commit();
@@ -141,7 +131,8 @@ public class MixedCriteriaTest extends SearchTestCase {
 	}
 
 
-	protected Class<?>[] getAnnotatedClasses() {
+	@Override
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] {
 				AbstractCar.class, CombiCar.class, SportCar.class, Bike.class
 		};

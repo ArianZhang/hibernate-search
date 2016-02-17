@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.batchindexing.impl;
 
@@ -34,10 +17,11 @@ import org.hibernate.SessionFactory;
 import org.hibernate.StatelessSession;
 import org.hibernate.Transaction;
 import org.hibernate.criterion.Projections;
+import org.hibernate.resource.transaction.spi.TransactionStatus;
 import org.hibernate.search.batchindexing.MassIndexerProgressMonitor;
 import org.hibernate.search.exception.ErrorHandler;
-import org.hibernate.search.util.logging.impl.LoggerFactory;
 import org.hibernate.search.util.logging.impl.Log;
+import org.hibernate.search.util.logging.impl.LoggerFactory;
 
 /**
  * This Runnable is going to feed the indexing queue
@@ -61,8 +45,9 @@ public class IdentifierProducer implements StatelessSessionAwareRunnable {
 	private final Class<?> indexedType;
 	private final MassIndexerProgressMonitor monitor;
 	private final long objectsLimit;
-	private final ErrorHandler errorHandler;
 	private final int idFetchSize;
+	private final ErrorHandler errorHandler;
+	private final String tenantId;
 
 	/**
 	 * @param fromIdentifierListToEntities the target queue where the produced identifiers are sent to
@@ -72,13 +57,15 @@ public class IdentifierProducer implements StatelessSessionAwareRunnable {
 	 * @param monitor to monitor indexing progress
 	 * @param objectsLimit if not zero
 	 * @param errorHandler how to handle unexpected errors
+	 * @param idFetchSize the fetch size
+	 * @param tenantId the tenant identifier
 	 */
 	public IdentifierProducer(
 			ProducerConsumerQueue<List<Serializable>> fromIdentifierListToEntities,
 			SessionFactory sessionFactory,
 			int objectLoadingBatchSize,
 			Class<?> indexedType, MassIndexerProgressMonitor monitor,
-			long objectsLimit, ErrorHandler errorHandler, int idFetchSize) {
+			long objectsLimit, ErrorHandler errorHandler, int idFetchSize, String tenantId) {
 				this.destination = fromIdentifierListToEntities;
 				this.sessionFactory = sessionFactory;
 				this.batchSize = objectLoadingBatchSize;
@@ -87,16 +74,18 @@ public class IdentifierProducer implements StatelessSessionAwareRunnable {
 				this.objectsLimit = objectsLimit;
 				this.errorHandler = errorHandler;
 				this.idFetchSize = idFetchSize;
+				this.tenantId = tenantId;
 				log.trace( "created" );
 	}
 
-	public void run(StatelessSession upperSession) {
+	@Override
+	public void run(StatelessSession upperSession) throws Exception {
 		log.trace( "started" );
 		try {
 			inTransactionWrapper( upperSession );
 		}
-		catch (Throwable e) {
-			errorHandler.handleException( log.massIndexerUnexpectedErrorMessage() , e );
+		catch (Exception exception) {
+			errorHandler.handleException( log.massIndexerExceptionWhileFetchingIds(), exception );
 		}
 		finally {
 			destination.producerStopping();
@@ -106,11 +95,16 @@ public class IdentifierProducer implements StatelessSessionAwareRunnable {
 
 	private void inTransactionWrapper(StatelessSession upperSession) throws Exception {
 		StatelessSession session = upperSession;
-		if (upperSession == null) {
-			session = sessionFactory.openStatelessSession();
+		if ( upperSession == null ) {
+			if ( tenantId == null ) {
+				session = sessionFactory.openStatelessSession();
+			}
+			else {
+				session = sessionFactory.withStatelessOptions().tenantIdentifier( tenantId ).openStatelessSession();
+			}
 		}
 		try {
-			Transaction transaction = Helper.getTransactionAndMarkForJoin( session );
+			Transaction transaction = session.getTransaction();
 			transaction.begin();
 			loadAllIdentifiers( session );
 			transaction.commit();
@@ -120,7 +114,7 @@ public class IdentifierProducer implements StatelessSessionAwareRunnable {
 			Thread.currentThread().interrupt();
 		}
 		finally {
-			if (upperSession == null) {
+			if ( upperSession == null ) {
 				session.close();
 			}
 		}
@@ -136,8 +130,9 @@ public class IdentifierProducer implements StatelessSessionAwareRunnable {
 		if ( objectsLimit != 0 && objectsLimit < totalCount ) {
 			totalCount = objectsLimit;
 		}
-		if ( log.isDebugEnabled() )
+		if ( log.isDebugEnabled() ) {
 			log.debugf( "going to fetch %d primary keys", totalCount);
+		}
 		monitor.addToTotalCount( totalCount );
 
 		Criteria criteria = session
@@ -154,6 +149,12 @@ public class IdentifierProducer implements StatelessSessionAwareRunnable {
 				Serializable id = (Serializable) results.get( 0 );
 				destinationList.add( id );
 				if ( destinationList.size() == batchSize ) {
+					// Explicitly checking whether the TX is still open; Depending on the driver implementation new ids
+					// might be produced otherwise if the driver fetches all rows up-front
+					if ( session.getTransaction().getStatus() != TransactionStatus.ACTIVE ) {
+						throw log.transactionNotActiveWhileProducingIdsForBatchIndexing( indexedType );
+					}
+
 					enqueueList( destinationList );
 					destinationList = new ArrayList<Serializable>( batchSize );
 				}

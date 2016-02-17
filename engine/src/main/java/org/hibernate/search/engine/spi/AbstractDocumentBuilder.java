@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.engine.spi;
 
@@ -31,26 +14,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.lucene.search.Similarity;
-import org.hibernate.annotations.common.AssertionFailure;
 import org.hibernate.annotations.common.reflection.ReflectionManager;
 import org.hibernate.annotations.common.reflection.XClass;
 import org.hibernate.annotations.common.reflection.XMember;
-import org.hibernate.search.SearchException;
-import org.hibernate.search.annotations.Store;
 import org.hibernate.search.backend.LuceneWork;
 import org.hibernate.search.bridge.spi.ConversionContext;
 import org.hibernate.search.engine.BoostStrategy;
 import org.hibernate.search.engine.impl.DefaultBoostStrategy;
 import org.hibernate.search.engine.impl.WorkPlan;
-import org.hibernate.search.engine.metadata.impl.AnnotationMetadataProvider;
 import org.hibernate.search.engine.metadata.impl.ContainedInMetadata;
 import org.hibernate.search.engine.metadata.impl.EmbeddedTypeMetadata;
-import org.hibernate.search.engine.metadata.impl.DocumentFieldMetadata;
-import org.hibernate.search.engine.metadata.impl.MetadataProvider;
 import org.hibernate.search.engine.metadata.impl.PropertyMetadata;
 import org.hibernate.search.engine.metadata.impl.TypeMetadata;
-import org.hibernate.search.impl.ConfigContext;
+import org.hibernate.search.exception.AssertionFailure;
 import org.hibernate.search.spi.InstanceInitializer;
 import org.hibernate.search.util.impl.ReflectionHelper;
 import org.hibernate.search.util.impl.ScopedAnalyzer;
@@ -64,13 +40,12 @@ import org.hibernate.search.util.logging.impl.LoggerFactory;
  * @author Davide D'Alto
  * @author Sanne Grinovero
  */
-public abstract class AbstractDocumentBuilder<T> {
+public abstract class AbstractDocumentBuilder {
 	private static final Log log = LoggerFactory.make();
 
 	private final XClass beanXClass;
 	private final Class<?> beanClass;
 	private final TypeMetadata typeMetadata;
-	private final Similarity similarity; //there is only 1 similarity per class hierarchy, and only 1 per index
 	private final InstanceInitializer instanceInitializer;
 
 	private boolean isRoot;
@@ -82,15 +57,13 @@ public abstract class AbstractDocumentBuilder<T> {
 	 * Constructor.
 	 *
 	 * @param xClass The class for which to build a document builder
-	 * @param configContext Handle to default configuration settings
-	 * @param similarity The index level similarity
+	 * @param typeMetadata metadata for the specified class
 	 * @param reflectionManager Reflection manager to use for processing the annotations
 	 * @param optimizationBlackList keeps track of types on which we need to disable collection events optimizations
 	 * @param instanceInitializer a {@link org.hibernate.search.spi.InstanceInitializer} object.
 	 */
 	public AbstractDocumentBuilder(XClass xClass,
-			ConfigContext configContext,
-			Similarity similarity,
+			TypeMetadata typeMetadata,
 			ReflectionManager reflectionManager,
 			Set<XClass> optimizationBlackList,
 			InstanceInitializer instanceInitializer) {
@@ -102,31 +75,15 @@ public abstract class AbstractDocumentBuilder<T> {
 		this.entityState = EntityState.CONTAINED_IN_ONLY;
 		this.beanXClass = xClass;
 		this.beanClass = reflectionManager.toClass( xClass );
-
-		MetadataProvider metadataProvider = new AnnotationMetadataProvider( reflectionManager, configContext );
-		this.typeMetadata = metadataProvider.getTypeMetadataFor( reflectionManager.toClass( xClass ) );
+		this.typeMetadata = typeMetadata;
 
 		optimizationBlackList.addAll( typeMetadata.getOptimizationBlackList() );
-
-		// set the default similarity in case that after processing all classes there is still no similarity set
-		if ( typeMetadata.getSimilarity() == null && similarity == null ) {
-			this.similarity = configContext.getDefaultSimilarity();
-		}
-		else if ( typeMetadata.getSimilarity() != null && similarity != null ) {
-			throw new SearchException(
-					"Multiple similarities defined in the same class hierarchy or on the index settings: " + beanClass.getName()
-			);
-		}
-		else if ( typeMetadata.getSimilarity() == null ) {
-			this.similarity = similarity;
-		}
-		else {
-			this.similarity = typeMetadata.getSimilarity();
-		}
 	}
 
-	public abstract void addWorkToQueue(Class<T> entityClass,
-			T entity, Serializable id,
+	public abstract void addWorkToQueue(
+			String tenantIdentifier,
+			Class<?> entityClass,
+			Object entity, Serializable id,
 			boolean delete,
 			boolean add,
 			List<LuceneWork> queue,
@@ -162,10 +119,6 @@ public abstract class AbstractDocumentBuilder<T> {
 
 	public TypeMetadata getMetadata() {
 		return typeMetadata;
-	}
-
-	public Similarity getSimilarity() {
-		return similarity;
 	}
 
 	public ScopedAnalyzer getAnalyzer() {
@@ -209,20 +162,33 @@ public abstract class AbstractDocumentBuilder<T> {
 	/**
 	 * If we have a work instance we have to check whether the instance to be indexed is contained in any other indexed entities.
 	 *
+	 * @see #appendContainedInWorkForInstance(Object, WorkPlan, ContainedInRecursionContext, String)
 	 * @param instance the instance to be indexed
 	 * @param workPlan the current work plan
-	 * @param currentDepth the current {@link org.hibernate.search.engine.spi.DepthValidator} object used to check the graph traversal
+	 * @param currentRecursionContext the current {@link org.hibernate.search.engine.spi.ContainedInRecursionContext} object used to check the graph traversal
 	 */
-	public void appendContainedInWorkForInstance(Object instance, WorkPlan workPlan, DepthValidator currentDepth) {
+	public void appendContainedInWorkForInstance(Object instance, WorkPlan workPlan, ContainedInRecursionContext currentRecursionContext) {
+		appendContainedInWorkForInstance( instance, workPlan, currentRecursionContext, null );
+	}
+
+	/**
+	 * If we have a work instance we have to check whether the instance to be indexed is contained in any other indexed entities for a tenant.
+	 *
+	 * @param instance the instance to be indexed
+	 * @param workPlan the current work plan
+	 * @param currentRecursionContext the current {@link org.hibernate.search.engine.spi.ContainedInRecursionContext} object used to check the graph traversal
+	 * @param tenantIdentifier the identifier of the tenant or null, if there isn't one
+	 * @see #appendContainedInWorkForInstance(Object, WorkPlan, ContainedInRecursionContext)
+	 */
+	public void appendContainedInWorkForInstance(Object instance, WorkPlan workPlan, ContainedInRecursionContext currentRecursionContext, String tenantIdentifier) {
 		for ( ContainedInMetadata containedInMetadata : typeMetadata.getContainedInMetadata() ) {
 			XMember member = containedInMetadata.getContainedInMember();
 			Object unproxiedInstance = instanceInitializer.unproxy( instance );
 
-			DepthValidator depth = updateDepth( unproxiedInstance, containedInMetadata, currentDepth );
-			depth.increaseDepth();
+			ContainedInRecursionContext recursionContext = updateContainedInRecursionContext( unproxiedInstance, containedInMetadata, currentRecursionContext );
 
-			if ( depth.isMaxDepthReached() ) {
-				return;
+			if ( recursionContext.isTerminal() ) {
+				continue;
 			}
 
 			Object value = ReflectionHelper.getMemberValue( unproxiedInstance, member );
@@ -232,19 +198,18 @@ public abstract class AbstractDocumentBuilder<T> {
 			}
 
 			if ( member.isArray() ) {
-				@SuppressWarnings("unchecked")
-				T[] array = (T[]) value;
-				for ( T arrayValue : array ) {
-					processSingleContainedInInstance( workPlan, arrayValue, depth );
+				Object[] array = (Object[]) value;
+				for ( Object arrayValue : array ) {
+					processSingleContainedInInstance( workPlan, arrayValue, recursionContext, tenantIdentifier );
 				}
 			}
 			else if ( member.isCollection() ) {
-				Collection<T> collection = null;
+				Collection<?> collection = null;
 				try {
 					collection = getActualCollection( member, value );
 					collection.size(); //load it
 				}
-				catch ( Exception e ) {
+				catch (Exception e) {
 					if ( e.getClass().getName().contains( "org.hibernate.LazyInitializationException" ) ) {
 						/* A deleted entity not having its collection initialized
 						 * leads to a LIE because the collection is no longer attached to the session
@@ -256,13 +221,13 @@ public abstract class AbstractDocumentBuilder<T> {
 					}
 				}
 				if ( collection != null ) {
-					for ( T collectionValue : collection ) {
-						processSingleContainedInInstance( workPlan, collectionValue, depth );
+					for ( Object collectionValue : collection ) {
+						processSingleContainedInInstance( workPlan, collectionValue, recursionContext, tenantIdentifier );
 					}
 				}
 			}
 			else {
-				processSingleContainedInInstance( workPlan, value, depth );
+				processSingleContainedInInstance( workPlan, value, recursionContext, tenantIdentifier );
 			}
 		}
 	}
@@ -271,35 +236,76 @@ public abstract class AbstractDocumentBuilder<T> {
 		return instanceInitializer;
 	}
 
-	private DepthValidator updateDepth(Object instance, ContainedInMetadata containedInMetadata, DepthValidator currentDepth) {
-		Integer maxDepth = null;
-		if ( instance != null ) {
-			maxDepth = containedInMetadata.getMaxDepth();
+	private ContainedInRecursionContext updateContainedInRecursionContext(Object containedInstance, ContainedInMetadata containedInMetadata,
+			ContainedInRecursionContext containedContext) {
+		int maxDepth;
+		int depth;
+
+		// Handle @IndexedEmbedded.depth-induced limits
+
+		Integer metadataMaxDepth = containedInMetadata.getMaxDepth();
+		if ( containedInstance != null && metadataMaxDepth != null ) {
+			maxDepth = metadataMaxDepth;
 		}
-		if ( maxDepth != null ) {
-			if ( currentDepth == null ) {
-				return new DepthValidator( maxDepth );
-			}
-			else {
-				int depth = currentDepth.getDepth();
-				if ( depth <= maxDepth ) {
-					return currentDepth;
-				}
-				else {
-					return new DepthValidator( maxDepth );
+		else {
+			maxDepth = containedContext != null ? containedContext.getMaxDepth() : Integer.MAX_VALUE;
+		}
+
+		depth = containedContext != null ? containedContext.getDepth() : 0;
+		if ( depth < Integer.MAX_VALUE ) { // Avoid integer overflow
+			++depth;
+		}
+
+		/*
+		 * Handle @IndexedEmbedded.includePaths-induced limits If the context for the contained element has a
+		 * comprehensive set of included paths, and if the @IndexedEmbedded matching the @ContainedIn we're currently
+		 * processing also has a comprehensive set of embedded paths, *then* we can compute the resulting set of
+		 * embedded fields (which is the intersection of those two sets). If this resulting set is empty, we can safely
+		 * stop the @ContainedIn processing: any changed field wouldn't be included in the Lucene document for
+		 * "containerInstance" anyway.
+		 */
+
+		Set<String> comprehensivePaths;
+		Set<String> metadataIncludePaths = containedInMetadata.getIncludePaths();
+
+		/*
+		 * See @IndexedEmbedded.depth: it should be considered as zero if it has its default value and if includePaths
+		 * contains elements
+		 */
+		if ( metadataIncludePaths != null && !metadataIncludePaths.isEmpty()
+				&& metadataMaxDepth != null && metadataMaxDepth.equals( Integer.MAX_VALUE ) ) {
+			String metadataPrefix = containedInMetadata.getPrefix();
+
+			/*
+			 * If the contained context Filter by contained context's included paths if they are comprehensive This
+			 * allows to detect when a @ContainedIn is irrelevant because the matching @IndexedEmbedded would not
+			 * capture any property.
+			 */
+			Set<String> containedComprehensivePaths =
+					containedContext != null ? containedContext.getComprehensivePaths() : null;
+
+			comprehensivePaths = new HashSet<>();
+			for ( String includedPath : metadataIncludePaths ) {
+				/*
+				 * If the contained context has a comprehensive list of included paths, use it to filter out our own
+				 * list
+				 */
+				if ( containedComprehensivePaths == null || containedComprehensivePaths.contains( includedPath ) ) {
+					comprehensivePaths.add( metadataPrefix + includedPath );
 				}
 			}
 		}
 		else {
-			if ( currentDepth != null ) {
-				return currentDepth;
-			}
-			else {
-				return new DepthValidator( Integer.MAX_VALUE );
-			}
+			comprehensivePaths = null;
 		}
+
+		return new ContainedInRecursionContext( maxDepth, depth, comprehensivePaths );
 	}
 
+	@Override
+	public String toString() {
+		return "DocumentBuilder for {" + beanClass.getName() + "}";
+	}
 
 	/**
 	 * A {@code XMember } instance treats a map as a collection as well in which case the map values are returned as
@@ -322,18 +328,19 @@ public abstract class AbstractDocumentBuilder<T> {
 		return collection;
 	}
 
-	private <T> void processSingleContainedInInstance(WorkPlan workplan, T value, DepthValidator depth) {
-		workplan.recurseContainedIn( value, depth );
+	private <T> void processSingleContainedInInstance(WorkPlan workplan, T value, ContainedInRecursionContext depth, String tenantId) {
+		workplan.recurseContainedIn( value, depth, tenantId );
 	}
 
 	/**
-	 * Hibernate entities might be considered dirty, but still have only changes that
-	 * don't affect indexing. So this isDirty() implementation will return true only
-	 * if the proposed change is possibly affecting the index.
+	 * Hibernate entities might be dirty (their state has changed), but none of these changes would effect
+	 * the the index state. This method will return {@code true} if any of changed entity properties identified
+	 * by their names ({@code dirtyPropertyNames}) will effect the index state.
 	 *
-	 * @param dirtyPropertyNames Contains the property name of each value which changed, or null for everything.
+	 * @param dirtyPropertyNames array of property names for the changed entity properties, {@code null} in case the
+	 * changed properties cannot be specified.
 	 *
-	 * @return true if it can't make sure the index doesn't need an update
+	 * @return {@code true} if the entity changes will effect the index state, {@code false} otherwise
 	 *
 	 * @since 3.4
 	 */
@@ -346,23 +353,11 @@ public abstract class AbstractDocumentBuilder<T> {
 		}
 
 		for ( String dirtyPropertyName : dirtyPropertyNames ) {
-			// Hibernate core will do an in-depth comparison of collections, taking care of creating new values,
-			// so it looks like we can rely on reference equality comparisons, or at least that seems a safe way:
 			PropertyMetadata propertyMetadata = typeMetadata.getPropertyMetadataForProperty( dirtyPropertyName );
 			if ( propertyMetadata != null ) {
-
-				DocumentFieldMetadata fieldMetadata = propertyMetadata.getFieldMetadata();
-				// take care of indexed fields:
-				if ( fieldMetadata.getIndex().isIndexed() ) {
-					return true;
-				}
-
-				// take care of stored fields:
-				Store store = fieldMetadata.getStore();
-				if ( store.equals( Store.YES ) || store.equals( Store.COMPRESS ) ) {
-					// unless Store.NO, which doesn't affect the index
-					return true;
-				}
+				// if there is a property metadata it means that there is at least one @Field.
+				// Fields are either indexed or stored, so we need to re-index
+				return true;
 			}
 
 			// consider IndexedEmbedded:
@@ -401,7 +396,7 @@ public abstract class AbstractDocumentBuilder<T> {
 	 * @param collectionRoleName a {@link java.lang.String} object.
 	 *
 	 * @return {@code true} if an update to the collection identified by the given role name effects the index
-	 *         state, {@code false} otherwise.
+	 * state, {@code false} otherwise.
 	 */
 	public boolean collectionChangeRequiresIndexUpdate(String collectionRoleName) {
 		if ( collectionRoleName == null ) {
@@ -421,14 +416,6 @@ public abstract class AbstractDocumentBuilder<T> {
 		return this.typeMetadata.containsCollectionRole( collectionRoleName );
 	}
 
-
-	/**
-	 * @deprecated Use {@link #collectionChangeRequiresIndexUpdate(String)} instead
-	 */
-	public boolean isCollectionRoleExcluded(String collectionRole) {
-		return !collectionChangeRequiresIndexUpdate( collectionRole );
-	}
-
 	/**
 	 * Verifies entity level preconditions to know if it's safe to skip index updates based
 	 * on specific field or collection updates.
@@ -446,7 +433,7 @@ public abstract class AbstractDocumentBuilder<T> {
 			);
 			return false; // can't know what a class bridge is going to look at -> reindex // TODO nice new feature to have?
 		}
-		BoostStrategy boostStrategy = typeMetadata.getClassBoostStrategy();
+		BoostStrategy boostStrategy = typeMetadata.getDynamicBoost();
 		if ( boostStrategy != null && !( boostStrategy instanceof DefaultBoostStrategy ) ) {
 			log.tracef(
 					"State inspection optimization disabled as DynamicBoost is enabled on entity %s",
@@ -461,7 +448,7 @@ public abstract class AbstractDocumentBuilder<T> {
 	 * Makes sure isCollectionRoleExcluded will always return false, so that
 	 * collection update events are always processed.
 	 *
-	 * @see #isCollectionRoleExcluded(String)
+	 * @see #collectionChangeRequiresIndexUpdate(String)
 	 */
 	public void forceStateInspectionOptimizationsDisabled() {
 		typeMetadata.disableStateInspectionOptimizations();

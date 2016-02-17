@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.bridge;
 
@@ -27,37 +10,47 @@ import java.net.URI;
 import java.net.URL;
 import java.util.Calendar;
 import java.util.Date;
-import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.TimeZone;
 import java.util.UUID;
 
-import org.apache.lucene.analysis.SimpleAnalyzer;
+import org.apache.lucene.analysis.core.SimpleAnalyzer;
+import org.apache.lucene.document.DateTools;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.queryParser.QueryParser;
+import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.NumericRangeQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.hibernate.HibernateException;
 import org.hibernate.Transaction;
-import org.hibernate.cfg.Configuration;
-import org.hibernate.search.Environment;
+import org.hibernate.dialect.PostgreSQL81Dialect;
+import org.hibernate.search.cfg.Environment;
 import org.hibernate.search.FullTextQuery;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
 import org.hibernate.search.annotations.Resolution;
 import org.hibernate.search.bridge.BridgeException;
-import org.hibernate.search.bridge.builtin.CalendarBridge;
+import org.hibernate.search.bridge.builtin.StringEncodingCalendarBridge;
 import org.hibernate.search.query.dsl.QueryBuilder;
-import org.hibernate.search.test.SearchTestCase;
-import org.hibernate.search.test.TestConstants;
+import org.hibernate.search.test.SearchTestBase;
+import org.hibernate.search.testsupport.TestConstants;
+import org.hibernate.testing.SkipForDialect;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * @author Emmanuel Bernard
  */
-public class BridgeTest extends SearchTestCase {
+public class BridgeTest extends SearchTestBase {
+	@Test
 	public void testDefaultAndNullBridges() throws Exception {
 		Cloud cloud = new Cloud();
 		cloud.setMyDate( null );
@@ -86,20 +79,27 @@ public class BridgeTest extends SearchTestCase {
 
 		tx = s.beginTransaction();
 		FullTextSession session = Search.getFullTextSession( s );
-		QueryParser parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "id", TestConstants.standardAnalyzer );
+		QueryParser parser = new QueryParser( "id", TestConstants.standardAnalyzer );
 		Query query;
 		List result;
 
-		query = parser.parse(
-				"double2:[2.1 TO 2.1] AND float2:[2.1 TO 2.1] " +
-						"AND integerv2:[2 TO 2.1] AND long2:[2 TO 2.1] AND type:\"dog\" AND storm:false"
-		);
+		BooleanQuery booleanQuery = new BooleanQuery();
+		booleanQuery.add( NumericRangeQuery.newDoubleRange( "double2", 2.1, 2.1, true, true ), BooleanClause.Occur.MUST );
+		booleanQuery.add( NumericRangeQuery.newFloatRange( "float2", 2.1f, 2.1f, true, true ), BooleanClause.Occur.MUST );
+		booleanQuery.add( NumericRangeQuery.newIntRange( "integerv2", 2, 3, true, true ), BooleanClause.Occur.MUST );
+		booleanQuery.add( NumericRangeQuery.newLongRange( "long2", 2l, 3l, true, true ), BooleanClause.Occur.MUST );
+		booleanQuery.add( new TermQuery(new Term("type", "dog")), BooleanClause.Occur.MUST );
+		booleanQuery.add( new TermQuery(new Term("storm", "false")), BooleanClause.Occur.MUST );
 
-		result = session.createFullTextQuery( query ).list();
+		result = session.createFullTextQuery( booleanQuery ).list();
 		assertEquals( "find primitives and do not fail on null", 1, result.size() );
 
-		query = parser.parse( "double1:[2.1 TO 2.1] OR float1:[2.1 TO 2.1] OR integerv1:[2 TO 2.1] OR long1:[2 TO 2.1]" );
-		result = session.createFullTextQuery( query ).list();
+		booleanQuery = new BooleanQuery();
+		booleanQuery.add( NumericRangeQuery.newDoubleRange( "double1", 2.1, 2.1, true, true ), BooleanClause.Occur.MUST );
+		booleanQuery.add( NumericRangeQuery.newFloatRange( "float1", 2.1f, 2.1f, true, true ), BooleanClause.Occur.MUST );
+		booleanQuery.add( NumericRangeQuery.newIntRange( "integerv1", 2, 3, true, true ), BooleanClause.Occur.MUST );
+		booleanQuery.add( NumericRangeQuery.newLongRange( "long1", 2l, 3l, true, true ), BooleanClause.Occur.MUST );
+		result = session.createFullTextQuery( booleanQuery ).list();
 		assertEquals( "null elements should not be stored", 0, result.size() ); //the query is dumb because restrictive
 
 		query = parser.parse( "type:dog" );
@@ -137,12 +137,12 @@ public class BridgeTest extends SearchTestCase {
 		assertEquals( "Wrong results number, CharacterBridge is not working", 1, result.size() );
 		assertEquals( "Wrong result, CharacterBridge is not working", 'P', ( (Object[]) result.get( 0 ) )[0] );
 
-		s.delete( s.get( Cloud.class, cloud.getId() ) );
 		tx.commit();
 		s.close();
 
 	}
 
+	@Test
 	public void testCustomBridges() throws Exception {
 		Cloud cloud = new Cloud();
 		cloud.setCustomFieldBridge( "This is divided by 2" );
@@ -156,7 +156,7 @@ public class BridgeTest extends SearchTestCase {
 
 		tx = s.beginTransaction();
 		FullTextSession session = Search.getFullTextSession( s );
-		QueryParser parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "id", TestConstants.simpleAnalyzer );
+		QueryParser parser = new QueryParser( "id", TestConstants.simpleAnalyzer );
 		Query query;
 		List result;
 
@@ -168,20 +168,20 @@ public class BridgeTest extends SearchTestCase {
 		result = session.createFullTextQuery( query ).list();
 		assertEquals( "Custom types not taken into account", 0, result.size() );
 
-		s.delete( s.get( Cloud.class, cloud.getId() ) );
 		tx.commit();
 		s.close();
 
 	}
 
+	@Test
+	@SkipForDialect(PostgreSQL81Dialect.class)//PosgreSQL doesn't allow storing null with these column types
 	public void testDateBridge() throws Exception {
-		Cloud cloud = new Cloud();
-		Calendar c = GregorianCalendar.getInstance();
-		c.setTimeZone( TimeZone.getTimeZone( "GMT" ) ); //for the sake of tests
-		c.set( 2000, 11, 15, 3, 43, 2 );
+		Calendar c = Calendar.getInstance( TimeZone.getTimeZone( "GMT" ), Locale.ROOT ); //for the sake of tests
+		c.set( 2000, Calendar.DECEMBER, 15, 3, 43, 2 );
 		c.set( Calendar.MILLISECOND, 5 );
-
 		Date date = new Date( c.getTimeInMillis() );
+
+		Cloud cloud = new Cloud();
 		cloud.setMyDate( date ); //5 millisecond
 		cloud.setDateDay( date );
 		cloud.setDateHour( date );
@@ -190,7 +190,7 @@ public class BridgeTest extends SearchTestCase {
 		cloud.setDateMonth( date );
 		cloud.setDateSecond( date );
 		cloud.setDateYear( date );
-		cloud.setChar2( 's' );
+
 		org.hibernate.Session s = openSession();
 		Transaction tx = s.beginTransaction();
 		s.persist( cloud );
@@ -199,46 +199,80 @@ public class BridgeTest extends SearchTestCase {
 
 		tx = s.beginTransaction();
 		FullTextSession session = Search.getFullTextSession( s );
-		QueryParser parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "id", TestConstants.standardAnalyzer );
-		Query query;
-		List result;
 
-		query = parser.parse(
-				"myDate:[19900101 TO 20060101]"
-						+ " AND dateDay:[20001214 TO 2000121501]"
-						+ " AND dateMonth:[200012 TO 20001201]"
-						+ " AND dateYear:[2000 TO 200001]"
-						+ " AND dateHour:[20001214 TO 2000121503]"
-						+ " AND dateMinute:[20001214 TO 200012150343]"
-						+ " AND dateSecond:[20001214 TO 20001215034302]"
-						+ " AND dateMillisecond:[20001214 TO 20001215034302005]"
+		BooleanQuery booleanQuery = new BooleanQuery();
+
+		Date myDate = DateTools.round( date, DateTools.Resolution.MILLISECOND );
+		NumericRangeQuery numericRangeQuery = NumericRangeQuery.newLongRange(
+				"myDate", myDate.getTime(), myDate.getTime(), true, true
 		);
-		result = session.createFullTextQuery( query ).list();
+		booleanQuery.add( numericRangeQuery, BooleanClause.Occur.MUST );
+
+		Date dateDay = DateTools.round( date, DateTools.Resolution.DAY );
+		numericRangeQuery = NumericRangeQuery.newLongRange(
+				"dateDay", dateDay.getTime(), dateDay.getTime(), true, true
+		);
+		booleanQuery.add( numericRangeQuery, BooleanClause.Occur.MUST );
+
+		Date dateMonth = DateTools.round( date, DateTools.Resolution.MONTH );
+		numericRangeQuery = NumericRangeQuery.newLongRange(
+				"dateMonth", dateMonth.getTime(), dateMonth.getTime(), true, true
+		);
+		booleanQuery.add( numericRangeQuery, BooleanClause.Occur.MUST );
+
+		Date dateYear = DateTools.round( date, DateTools.Resolution.YEAR );
+		numericRangeQuery = NumericRangeQuery.newLongRange(
+				"dateYear", dateYear.getTime(), dateYear.getTime(), true, true
+		);
+		booleanQuery.add( numericRangeQuery, BooleanClause.Occur.MUST );
+
+		Date dateHour = DateTools.round( date, DateTools.Resolution.HOUR );
+		numericRangeQuery = NumericRangeQuery.newLongRange(
+				"dateHour", dateHour.getTime(), dateHour.getTime(), true, true
+		);
+		booleanQuery.add( numericRangeQuery, BooleanClause.Occur.MUST );
+
+		Date dateMinute = DateTools.round( date, DateTools.Resolution.MINUTE );
+		numericRangeQuery = NumericRangeQuery.newLongRange(
+				"dateMinute", dateMinute.getTime(), dateMinute.getTime(), true, true
+		);
+		booleanQuery.add( numericRangeQuery, BooleanClause.Occur.MUST );
+
+		Date dateSecond = DateTools.round( date, DateTools.Resolution.SECOND );
+		numericRangeQuery = NumericRangeQuery.newLongRange(
+				"dateSecond", dateSecond.getTime(), dateSecond.getTime(), true, true
+		);
+		booleanQuery.add( numericRangeQuery, BooleanClause.Occur.MUST );
+
+		Date dateMillisecond = DateTools.round( date, DateTools.Resolution.MILLISECOND );
+		numericRangeQuery = NumericRangeQuery.newLongRange(
+				"dateMillisecond", dateMillisecond.getTime(), dateMillisecond.getTime(), true, true
+		);
+		booleanQuery.add( numericRangeQuery, BooleanClause.Occur.MUST );
+
+		List result = session.createFullTextQuery( booleanQuery ).list();
 		assertEquals( "Date not found or not property truncated", 1, result.size() );
 
-		s.delete( s.get( Cloud.class, cloud.getId() ) );
 		tx.commit();
 		s.close();
-
 	}
 
 
+	@Test
 	public void testCalendarBridge() throws Exception {
 		Cloud cloud = new Cloud();
-		Calendar c = GregorianCalendar.getInstance();
-		c.setTimeZone( TimeZone.getTimeZone( "GMT" ) ); //for the sake of tests
-		c.set( 2000, 11, 15, 3, 43, 2 );
-		c.set( Calendar.MILLISECOND, 5 );
+		Calendar calendar = Calendar.getInstance( TimeZone.getTimeZone( "GMT" ), Locale.ROOT ); //for the sake of tests
+		calendar.set( 2000, 11, 15, 3, 43, 2 );
+		calendar.set( Calendar.MILLISECOND, 5 );
 
-
-		cloud.setMyCalendar( c ); // 5 millisecond
-		cloud.setCalendarDay( c );
-		cloud.setCalendarHour( c );
-		cloud.setCalendarMillisecond( c );
-		cloud.setCalendarMinute( c );
-		cloud.setCalendarMonth( c );
-		cloud.setCalendarSecond( c );
-		cloud.setCalendarYear( c );
+		cloud.setMyCalendar( calendar ); // 5 millisecond
+		cloud.setCalendarDay( calendar );
+		cloud.setCalendarHour( calendar );
+		cloud.setCalendarMillisecond( calendar );
+		cloud.setCalendarMinute( calendar );
+		cloud.setCalendarMonth( calendar );
+		cloud.setCalendarSecond( calendar );
+		cloud.setCalendarYear( calendar );
 		cloud.setChar2( 's' );
 		org.hibernate.Session s = openSession();
 		Transaction tx = s.beginTransaction();
@@ -248,39 +282,76 @@ public class BridgeTest extends SearchTestCase {
 
 		tx = s.beginTransaction();
 		FullTextSession session = Search.getFullTextSession( s );
-		QueryParser parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "id", TestConstants.standardAnalyzer );
-		Query query;
-		List result;
 
-		query = parser.parse(
-				"myCalendar:[19900101 TO 20060101]"
-						+ " AND calendarDay:[20001214 TO 2000121501]"
-						+ " AND calendarMonth:[200012 TO 20001201]"
-						+ " AND calendarYear:[2000 TO 200001]"
-						+ " AND calendarHour:[20001214 TO 2000121503]"
-						+ " AND calendarMinute:[20001214 TO 200012150343]"
-						+ " AND calendarSecond:[20001214 TO 20001215034302]"
-						+ " AND calendarMillisecond:[20001214 TO 20001215034302005]"
+		Date date = calendar.getTime();
+		BooleanQuery booleanQuery = new BooleanQuery();
+		Date myDate = DateTools.round( date, DateTools.Resolution.MILLISECOND );
+		NumericRangeQuery numericRangeQuery = NumericRangeQuery.newLongRange(
+				"myCalendar", myDate.getTime(), myDate.getTime(), true, true
 		);
-		result = session.createFullTextQuery( query ).list();
+		booleanQuery.add( numericRangeQuery, BooleanClause.Occur.MUST );
+
+		Date dateDay = DateTools.round( date, DateTools.Resolution.DAY );
+		numericRangeQuery = NumericRangeQuery.newLongRange(
+				"calendarDay", dateDay.getTime(), dateDay.getTime(), true, true
+		);
+		booleanQuery.add( numericRangeQuery, BooleanClause.Occur.MUST );
+
+		Date dateMonth = DateTools.round( date, DateTools.Resolution.MONTH );
+		numericRangeQuery = NumericRangeQuery.newLongRange(
+				"calendarMonth", dateMonth.getTime(), dateMonth.getTime(), true, true
+		);
+		booleanQuery.add( numericRangeQuery, BooleanClause.Occur.MUST );
+
+		Date dateYear = DateTools.round( date, DateTools.Resolution.YEAR );
+		numericRangeQuery = NumericRangeQuery.newLongRange(
+				"calendarYear", dateYear.getTime(), dateYear.getTime(), true, true
+		);
+		booleanQuery.add( numericRangeQuery, BooleanClause.Occur.MUST );
+
+		Date dateHour = DateTools.round( date, DateTools.Resolution.HOUR );
+		numericRangeQuery = NumericRangeQuery.newLongRange(
+				"calendarHour", dateHour.getTime(), dateHour.getTime(), true, true
+		);
+		booleanQuery.add( numericRangeQuery, BooleanClause.Occur.MUST );
+
+		Date dateMinute = DateTools.round( date, DateTools.Resolution.MINUTE );
+		numericRangeQuery = NumericRangeQuery.newLongRange(
+				"calendarMinute", dateMinute.getTime(), dateMinute.getTime(), true, true
+		);
+		booleanQuery.add( numericRangeQuery, BooleanClause.Occur.MUST );
+
+		Date dateSecond = DateTools.round( date, DateTools.Resolution.SECOND );
+		numericRangeQuery = NumericRangeQuery.newLongRange(
+				"calendarSecond", dateSecond.getTime(), dateSecond.getTime(), true, true
+		);
+		booleanQuery.add( numericRangeQuery, BooleanClause.Occur.MUST );
+
+		Date dateMillisecond = DateTools.round( date, DateTools.Resolution.MILLISECOND );
+		numericRangeQuery = NumericRangeQuery.newLongRange(
+				"calendarMillisecond", dateMillisecond.getTime(), dateMillisecond.getTime(), true, true
+		);
+		booleanQuery.add( numericRangeQuery, BooleanClause.Occur.MUST );
+
+		List result = session.createFullTextQuery( booleanQuery ).list();
 		assertEquals( "Calendar not found or not property truncated", 1, result.size() );
 
-		s.delete( s.get( Cloud.class, cloud.getId() ) );
 		tx.commit();
 		s.close();
 
 		//now unit-test the bridge directly:
 
-		CalendarBridge bridge = new CalendarBridge();
+		StringEncodingCalendarBridge bridge = new StringEncodingCalendarBridge();
 		HashMap<String, String> bridgeParams = new HashMap<String, String>();
-		bridgeParams.put( CalendarBridge.RESOLUTION_PARAMETER, Resolution.YEAR.toString() );
+		bridgeParams.put( "resolution", Resolution.YEAR.toString() );
 		bridge.setParameterValues( bridgeParams );
-		assertEquals( "2000", bridge.objectToString( c ) );
-		bridgeParams.put( CalendarBridge.RESOLUTION_PARAMETER, Resolution.DAY.toString() );
+		assertEquals( "2000", bridge.objectToString( calendar ) );
+		bridgeParams.put( "resolution", Resolution.DAY.toString() );
 		bridge.setParameterValues( bridgeParams );
-		assertEquals( "20001215", bridge.objectToString( c ) );
+		assertEquals( "20001215", bridge.objectToString( calendar ) );
 	}
 
+	@Test
 	public void testIncorrectSetBridge() throws Exception {
 		IncorrectSet incorrect = new IncorrectSet();
 		incorrect.setSubIncorrect( new IncorrectSet.SubIncorrect() );
@@ -317,6 +388,7 @@ public class BridgeTest extends SearchTestCase {
 		s.close();
 	}
 
+	@Test
 	public void testIncorrectGetBridge() throws Exception {
 		IncorrectGet incorrect = new IncorrectGet();
 		incorrect.setSubIncorrect( new IncorrectGet.SubIncorrect() );
@@ -341,7 +413,7 @@ public class BridgeTest extends SearchTestCase {
 		}
 		catch (HibernateException e) {
 			final Throwable throwable = e.getCause();
-			if (throwable instanceof BridgeException) {
+			if ( throwable instanceof BridgeException ) {
 				//expected
 				//System.out.println( throwable.getMessage() );
 				assertTrue( throwable.getMessage().contains( "class: " + IncorrectGet.class.getName() ) );
@@ -357,13 +429,10 @@ public class BridgeTest extends SearchTestCase {
 			e.printStackTrace();
 			fail( "Incorrect bridge should raise a SearchException" );
 		}
-
-		tx = s.beginTransaction();
-		s.delete( s.get( IncorrectGet.class, incorrect.getId() ) );
-		tx.commit();
 		s.close();
 	}
 
+	@Test
 	public void testIncorrectObjectToStringBridge() throws Exception {
 		IncorrectObjectToString incorrect = new IncorrectObjectToString();
 		incorrect.setName( "test" );
@@ -381,7 +450,7 @@ public class BridgeTest extends SearchTestCase {
 		}
 		catch (HibernateException e) {
 			final Throwable throwable = e.getCause();
-			if (throwable instanceof BridgeException) {
+			if ( throwable instanceof BridgeException ) {
 				//expected
 				assertTrue( throwable.getMessage().contains( "class: " + IncorrectObjectToString.class.getName() ) );
 				assertTrue( throwable.getMessage().contains( "path: id" ) );
@@ -400,7 +469,8 @@ public class BridgeTest extends SearchTestCase {
 	}
 
 
-	protected Class<?>[] getAnnotatedClasses() {
+	@Override
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] {
 				Cloud.class,
 				IncorrectSet.class,
@@ -410,8 +480,8 @@ public class BridgeTest extends SearchTestCase {
 	}
 
 
-	protected void configure(Configuration cfg) {
-		super.configure( cfg );
-		cfg.setProperty( Environment.ANALYZER_CLASS, SimpleAnalyzer.class.getName() );
+	@Override
+	public void configure(Map<String,Object> cfg) {
+		cfg.put( Environment.ANALYZER_CLASS, SimpleAnalyzer.class.getName() );
 	}
 }

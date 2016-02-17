@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.cfg;
 
@@ -27,14 +10,21 @@ import java.lang.annotation.ElementType;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.apache.solr.analysis.TokenizerFactory;
+import org.apache.lucene.analysis.util.TokenizerFactory;
 
+/**
+ * Configures index-embedded association.
+ *
+ * @author Emmanuel Bernard
+ * @author Gunnar Morling
+ * @see org.hibernate.search.annotations.IndexedEmbedded
+ */
 public class IndexEmbeddedMapping {
 
 	private final SearchMapping mapping;
 	private final Map<String,Object> indexEmbedded;
-	private EntityDescriptor entity;
-	private PropertyDescriptor property;
+	private final EntityDescriptor entity;
+	private final PropertyDescriptor property;
 
 	public IndexEmbeddedMapping(SearchMapping mapping, PropertyDescriptor property, EntityDescriptor entity) {
 		this.mapping = mapping;
@@ -59,6 +49,34 @@ public class IndexEmbeddedMapping {
 		return this;
 	}
 
+	public IndexEmbeddedMapping includeEmbeddedObjectId(boolean includeEmbeddedObjectId) {
+		this.indexEmbedded.put( "includeEmbeddedObjectId", includeEmbeddedObjectId );
+		return this;
+	}
+
+	public IndexEmbeddedMapping indexNullAs(String nullToken) {
+		this.indexEmbedded.put( "indexNullAs", nullToken );
+		return this;
+	}
+
+	public IndexEmbeddedMapping includePaths(String firstPath, String... furtherPaths) {
+		this.indexEmbedded.put( "includePaths", merge( firstPath, furtherPaths ) );
+		return this;
+	}
+
+	private String[] merge(String firstPath, String... furtherPaths) {
+		if ( furtherPaths == null ) {
+			return new String[] { firstPath };
+		}
+		else {
+			String[] paths = new String[1 + furtherPaths.length];
+			paths[0] = firstPath;
+			System.arraycopy( furtherPaths, 0, paths, 1, furtherPaths.length );
+
+			return paths;
+		}
+	}
+
 	public PropertyMapping property(String name, ElementType type) {
 		return new PropertyMapping( name, type, entity, mapping );
 	}
@@ -74,5 +92,4 @@ public class IndexEmbeddedMapping {
 	public FieldMapping field() {
 		return new FieldMapping( property, entity, mapping );
 	}
-
 }

@@ -1,67 +1,53 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2012 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.configuration;
 
 import java.lang.annotation.ElementType;
 
-import junit.framework.Assert;
+import org.junit.Assert;
 
 import org.hibernate.search.annotations.DocumentId;
 import org.hibernate.search.annotations.Field;
 import org.hibernate.search.annotations.Indexed;
 import org.hibernate.search.cfg.SearchMapping;
-import org.hibernate.search.impl.MutableSearchFactory;
-import org.hibernate.search.spi.SearchFactoryBuilder;
-import org.hibernate.search.test.util.ManualConfiguration;
+import org.hibernate.search.engine.impl.MutableSearchFactory;
+import org.hibernate.search.spi.SearchIntegratorBuilder;
+import org.hibernate.search.testsupport.setup.SearchConfigurationForTest;
 import org.junit.Test;
 
 /**
  * Verifies org.hibernate.search.test.util.ManualConfiguration.isTransactionManagerExpected()
  * is applied correctly to the build SearchFactory [HSEARCH-1055].
  *
- * @author Sanne Grinovero <sanne@hibernate.org> (C) 2012 Red Hat Inc.
+ * @author Sanne Grinovero (C) 2012 Red Hat Inc.
  */
 public class TransactionsExpectedTest {
 
 	@Test
 	public void testDefaultImplementation() {
-		ManualConfiguration cfg = new ManualConfiguration();
+		SearchConfigurationForTest cfg = new SearchConfigurationForTest();
 		verifyTransactionsExpectedOption( true, cfg );
 	}
 
 	@Test
 	public void testTransactionsNotExpected() {
-		ManualConfiguration cfg = new ManualConfiguration();
+		SearchConfigurationForTest cfg = new SearchConfigurationForTest();
 		cfg.setTransactionsExpected( false );
 		verifyTransactionsExpectedOption( false, cfg );
 	}
 
 	@Test
 	public void testTransactionsExpected() {
-		ManualConfiguration cfg = new ManualConfiguration();
+		SearchConfigurationForTest cfg = new SearchConfigurationForTest();
 		cfg.setTransactionsExpected( true );
 		verifyTransactionsExpectedOption( true, cfg );
 	}
 
-	private void verifyTransactionsExpectedOption(boolean expectation, ManualConfiguration cfg) {
+	private void verifyTransactionsExpectedOption(boolean expectation, SearchConfigurationForTest cfg) {
 		SearchMapping mapping = new SearchMapping();
 		mapping
 			.entity( Document.class ).indexed()
@@ -69,9 +55,8 @@ public class TransactionsExpectedTest {
 			.property( "title", ElementType.FIELD ).field()
 			;
 		cfg.setProgrammaticMapping( mapping );
-		cfg.addProperty( "hibernate.search.default.directory_provider", "ram" );
 		cfg.addClass( Document.class );
-		MutableSearchFactory sf = (MutableSearchFactory) new SearchFactoryBuilder().configuration( cfg ).buildSearchFactory();
+		MutableSearchFactory sf = (MutableSearchFactory) new SearchIntegratorBuilder().configuration( cfg ).buildSearchIntegrator();
 		try {
 			Assert.assertEquals( expectation, sf.isTransactionManagerExpected() );
 			// trigger a SearchFactory rebuild:

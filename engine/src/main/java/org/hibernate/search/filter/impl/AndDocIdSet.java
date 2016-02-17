@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.filter.impl;
 
@@ -29,7 +12,8 @@ import java.util.List;
 
 import org.apache.lucene.search.DocIdSet;
 import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.util.OpenBitSet;
+import org.apache.lucene.util.BitDocIdSet;
+import org.apache.lucene.util.FixedBitSet;
 
 import static java.lang.Math.max;
 
@@ -74,11 +58,16 @@ public class AndDocIdSet extends DocIdSet {
 		int size = andedDocIdSets.size();
 		DocIdSetIterator[] iterators = new DocIdSetIterator[size];
 		for ( int i = 0; i < size; i++ ) {
+			DocIdSet docIdSet = andedDocIdSets.get( i );
+			if ( docIdSet == null ) {
+				// Since Lucene 4 even the docIdSet could be returned at null to signify an empty match
+				return EMPTY_DOCIDSET;
+			}
 			// build all iterators
-			DocIdSetIterator docIdSetIterator = andedDocIdSets.get( i ).iterator();
+			DocIdSetIterator docIdSetIterator = docIdSet.iterator();
 			if ( docIdSetIterator == null ) {
 				// the Lucene API permits to return null on any iterator for empty matches
-				return DocIdSet.EMPTY_DOCIDSET;
+				return EMPTY_DOCIDSET;
 			}
 			iterators[i] = docIdSetIterator;
 		}
@@ -88,13 +77,13 @@ public class AndDocIdSet extends DocIdSet {
 	}
 
 	private DocIdSet makeDocIdSetOnAgreedBits(final DocIdSetIterator[] iterators) throws IOException {
-		final OpenBitSet result = new OpenBitSet( maxDocNumber );
+		final FixedBitSet result = new FixedBitSet( maxDocNumber );
 		final int numberOfIterators = iterators.length;
 
 		int targetPosition = findFirstTargetPosition( iterators, result );
 
 		if ( targetPosition == DocIdSetIterator.NO_MORE_DOCS ) {
-			return DocIdSet.EMPTY_DOCIDSET;
+			return EMPTY_DOCIDSET;
 		}
 
 		// Each iterator can vote "ok" for the current target to
@@ -112,11 +101,11 @@ public class AndDocIdSet extends DocIdSet {
 				position = iterator.advance( targetPosition );
 			}
 			if ( position == DocIdSetIterator.NO_MORE_DOCS ) {
-				return result;
+				return new BitDocIdSet( result );
 			} //exit condition
 			if ( position == targetPosition ) {
 				if ( ++votes == numberOfIterators ) {
-					result.fastSet( position );
+					result.set( position );
 					votes = 0;
 					targetPosition++;
 				}
@@ -134,7 +123,7 @@ public class AndDocIdSet extends DocIdSet {
 		return iterator.docID() == targetPosition;
 	}
 
-	private int findFirstTargetPosition(final DocIdSetIterator[] iterators, OpenBitSet result) throws IOException {
+	private int findFirstTargetPosition(final DocIdSetIterator[] iterators, FixedBitSet result) throws IOException {
 		int targetPosition = iterators[0].nextDoc();
 		if ( targetPosition == DocIdSetIterator.NO_MORE_DOCS ) {
 			// first iterator has no values, so skip all
@@ -159,10 +148,25 @@ public class AndDocIdSet extends DocIdSet {
 		// end iterator initialize
 
 		if ( allIteratorsShareSameFirstTarget ) {
-			result.fastSet( targetPosition );
+			result.set( targetPosition );
 			targetPosition++;
 		}
 
 		return targetPosition;
 	}
+
+	public static final DocIdSet EMPTY_DOCIDSET = DocIdSet.EMPTY;
+
+	/* (non-Javadoc)
+	 * @see org.apache.lucene.util.Accountable#ramBytesUsed()
+	 */
+	@Override
+	public long ramBytesUsed() {
+		long memoryEstimate = docIdBitSet.ramBytesUsed();
+		for ( DocIdSet sets : andedDocIdSets ) {
+			memoryEstimate += sets.ramBytesUsed();
+		}
+		return memoryEstimate;
+	}
+
 }

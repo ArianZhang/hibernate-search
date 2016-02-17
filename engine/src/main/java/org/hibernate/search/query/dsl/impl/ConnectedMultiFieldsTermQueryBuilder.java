@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.query.dsl.impl;
@@ -36,15 +19,17 @@ import org.apache.lucene.search.FuzzyQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.WildcardQuery;
-
-import org.hibernate.annotations.common.AssertionFailure;
-import org.hibernate.search.SearchException;
 import org.hibernate.search.bridge.FieldBridge;
+import org.hibernate.search.bridge.builtin.NumericEncodingDateBridge;
 import org.hibernate.search.bridge.builtin.NumericFieldBridge;
+import org.hibernate.search.bridge.builtin.impl.NullEncodingTwoWayFieldBridge;
+import org.hibernate.search.bridge.builtin.time.impl.NumericTimeBridge;
 import org.hibernate.search.bridge.spi.ConversionContext;
 import org.hibernate.search.bridge.util.impl.ContextualExceptionBridgeHelper;
 import org.hibernate.search.bridge.util.impl.NumericFieldUtils;
 import org.hibernate.search.engine.spi.DocumentBuilderIndexedEntity;
+import org.hibernate.search.exception.AssertionFailure;
+import org.hibernate.search.exception.SearchException;
 import org.hibernate.search.query.dsl.TermTermination;
 import org.hibernate.search.util.logging.impl.Log;
 import org.hibernate.search.util.logging.impl.LoggerFactory;
@@ -59,30 +44,31 @@ public class ConnectedMultiFieldsTermQueryBuilder implements TermTermination {
 	private final Object value;
 	private final QueryCustomizer queryCustomizer;
 	private final TermQueryContext termContext;
-	private final List<FieldContext> fieldContexts;
+	private final FieldsContext fieldsContext;
 	private final QueryBuildingContext queryContext;
 
 	public ConnectedMultiFieldsTermQueryBuilder(TermQueryContext termContext,
 												Object value,
-												List<FieldContext> fieldContexts,
+												FieldsContext fieldsContext,
 												QueryCustomizer queryCustomizer,
 												QueryBuildingContext queryContext) {
 		this.termContext = termContext;
 		this.value = value;
 		this.queryContext = queryContext;
 		this.queryCustomizer = queryCustomizer;
-		this.fieldContexts = fieldContexts;
+		this.fieldsContext = fieldsContext;
 	}
 
+	@Override
 	public Query createQuery() {
-		final int size = fieldContexts.size();
+		final int size = fieldsContext.size();
 		final ConversionContext conversionContext = new ContextualExceptionBridgeHelper();
 		if ( size == 1 ) {
-			return queryCustomizer.setWrappedQuery( createQuery( fieldContexts.get( 0 ), conversionContext ) ).createQuery();
+			return queryCustomizer.setWrappedQuery( createQuery( fieldsContext.getFirst(), conversionContext ) ).createQuery();
 		}
 		else {
 			BooleanQuery aggregatedFieldsQuery = new BooleanQuery();
-			for ( FieldContext fieldContext : fieldContexts ) {
+			for ( FieldContext fieldContext : fieldsContext ) {
 				aggregatedFieldsQuery.add( createQuery( fieldContext, conversionContext ), BooleanClause.Occur.SHOULD );
 			}
 			return queryCustomizer.setWrappedQuery( aggregatedFieldsQuery ).createQuery();
@@ -91,15 +77,33 @@ public class ConnectedMultiFieldsTermQueryBuilder implements TermTermination {
 
 	private Query createQuery(FieldContext fieldContext, ConversionContext conversionContext) {
 		final Query perFieldQuery;
-		final DocumentBuilderIndexedEntity<?> documentBuilder = Helper.getDocumentBuilder( queryContext );
-		FieldBridge fieldBridge = documentBuilder.getBridge( fieldContext.getField() );
-		if ( fieldBridge instanceof NumericFieldBridge ) {
-			return NumericFieldUtils.createExactMatchQuery( fieldContext.getField(), value );
+		final DocumentBuilderIndexedEntity documentBuilder = Helper.getDocumentBuilder( queryContext );
+		final boolean applyTokenization;
+
+		FieldBridge fieldBridge = fieldContext.getFieldBridge() != null ? fieldContext.getFieldBridge() : documentBuilder.getBridge( fieldContext.getField() );
+		// Handle non-null numeric values
+		if ( value != null ) {
+			applyTokenization = fieldContext.applyAnalyzer();
+			if ( fieldBridge instanceof NullEncodingTwoWayFieldBridge ) {
+				fieldBridge = ( (NullEncodingTwoWayFieldBridge) fieldBridge ).unwrap();
+			}
+			if ( isNumericBridge( fieldBridge ) ) {
+				return NumericFieldUtils.createExactMatchQuery( fieldContext.getField(), value );
+			}
+		}
+		else {
+			applyTokenization = false;
+			if ( fieldBridge instanceof NullEncodingTwoWayFieldBridge ) {
+				NullEncodingTwoWayFieldBridge nullEncodingBridge = (NullEncodingTwoWayFieldBridge) fieldBridge;
+				validateNullValueIsSearchable( fieldContext );
+				return nullEncodingBridge.buildNullQuery( fieldContext.getField() );
+			}
 		}
 
-		String searchTerm = buildSearchTerm( fieldContext, documentBuilder, conversionContext );
+		validateNullValueIsSearchable( fieldContext );
+		final String searchTerm = buildSearchTerm( fieldContext, documentBuilder, conversionContext );
 
-		if ( fieldContext.isIgnoreAnalyzer() ) {
+		if ( !applyTokenization ) {
 			perFieldQuery = createTermQuery( fieldContext, searchTerm );
 		}
 		else {
@@ -125,14 +129,22 @@ public class ConnectedMultiFieldsTermQueryBuilder implements TermTermination {
 		return fieldContext.getFieldCustomizer().setWrappedQuery( perFieldQuery ).createQuery();
 	}
 
-	private String buildSearchTerm(FieldContext fieldContext, DocumentBuilderIndexedEntity<?> documentBuilder, ConversionContext conversionContext) {
+	private static boolean isNumericBridge(FieldBridge fieldBridge) {
+		return fieldBridge instanceof NumericFieldBridge
+				|| fieldBridge instanceof NumericTimeBridge
+				|| fieldBridge instanceof NumericEncodingDateBridge;
+	}
+
+	private void validateNullValueIsSearchable(FieldContext fieldContext) {
 		if ( fieldContext.isIgnoreFieldBridge() ) {
 			if ( value == null ) {
-				throw new SearchException(
-						"Unable to search for null token on field "
-								+ fieldContext.getField() + " if field bridge is ignored."
-				);
+				throw log.unableToSearchOnNullValueWithoutFieldBridge( fieldContext.getField() );
 			}
+		}
+	}
+
+	private String buildSearchTerm(FieldContext fieldContext, DocumentBuilderIndexedEntity documentBuilder, ConversionContext conversionContext) {
+		if ( fieldContext.isIgnoreFieldBridge() ) {
 			String stringform = value.toString();
 			if ( stringform == null ) {
 				throw new SearchException(
@@ -143,7 +155,7 @@ public class ConnectedMultiFieldsTermQueryBuilder implements TermTermination {
 		}
 		else {
 			// need to go via the appropriate bridge, because value is an object, eg boolean, and must be converted to a string first
-			return documentBuilder.objectToString( fieldContext.getField(), value, conversionContext );
+			return fieldContext.objectToString( documentBuilder, value, conversionContext );
 		}
 	}
 
@@ -158,9 +170,17 @@ public class ConnectedMultiFieldsTermQueryBuilder implements TermTermination {
 				query = new WildcardQuery( new Term( fieldName, term ) );
 				break;
 			case FUZZY:
+				int maxEditDistance;
+				if ( termContext.getThreshold() != null ) {
+					//support legacy withThreshold setting
+					maxEditDistance = FuzzyQuery.floatToEdits( termContext.getThreshold(), term.length() );
+				}
+				else {
+					maxEditDistance = termContext.getMaxEditDistance();
+				}
 				query = new FuzzyQuery(
 						new Term( fieldName, term ),
-						termContext.getThreshold(),
+						maxEditDistance,
 						termContext.getPrefixLength()
 				);
 				break;
@@ -180,7 +200,7 @@ public class ConnectedMultiFieldsTermQueryBuilder implements TermTermination {
 			try {
 				terms = Helper.getAllTermsFromText( fieldName, localText, analyzer );
 			}
-			catch ( IOException e ) {
+			catch (IOException e) {
 				throw new AssertionFailure( "IO exception while reading String stream??", e );
 			}
 		}

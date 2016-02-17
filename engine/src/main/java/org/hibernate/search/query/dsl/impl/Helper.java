@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.query.dsl.impl;
@@ -33,30 +16,34 @@ import java.util.List;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
-
-import org.hibernate.annotations.common.AssertionFailure;
-import org.hibernate.search.SearchException;
+import org.hibernate.search.engine.integration.impl.ExtendedSearchIntegrator;
 import org.hibernate.search.engine.spi.DocumentBuilderIndexedEntity;
-import org.hibernate.search.engine.spi.EntityIndexBinder;
-import org.hibernate.search.engine.spi.SearchFactoryImplementor;
+import org.hibernate.search.engine.spi.EntityIndexBinding;
+import org.hibernate.search.exception.AssertionFailure;
+import org.hibernate.search.exception.SearchException;
 
 /**
  * @author Emmanuel Bernard
  */
-class Helper {
+final class Helper {
+
+	private Helper() {
+		//not allowed
+	}
+
 	/**
 	 * return the analyzed value for a given field. If several terms are created, an exception is raised.
 	 */
 	static String getAnalyzedTerm(String fieldName, String value, String name, Analyzer queryAnalyzer, FieldContext fieldContext) {
-		if ( fieldContext.isIgnoreAnalyzer() ) {
+		if ( !fieldContext.applyAnalyzer() ) {
 			return value;
 		}
 
 		try {
 			final List<String> termsFromText = getAllTermsFromText(
-					fieldName, value.toString(), queryAnalyzer
+					fieldName, value, queryAnalyzer
 			);
-			if (termsFromText.size() > 1) {
+			if ( termsFromText.size() > 1 ) {
 				StringBuilder error = new StringBuilder( "The ")
 						.append( name )
 						.append( " parameter leads to several terms when analyzed: " );
@@ -68,7 +55,7 @@ class Helper {
 			}
 			return termsFromText.size() == 0 ? null : termsFromText.get( 0 );
 		}
-		catch ( IOException e ) {
+		catch (IOException e) {
 			throw new AssertionFailure("IO exception while reading String stream??", e);
 		}
 	}
@@ -78,31 +65,34 @@ class Helper {
 
 		// Can't deal with null at this point. Likely returned by some FieldBridge not recognizing the type.
 		if ( localText == null ) {
-			throw new SearchException( "Search parameter on field " + fieldName + " could not be converted. " +
+			throw new SearchException( "Search parameter on field '" + fieldName + "' could not be converted. " +
 					"Are the parameter and the field of the same type?" +
 					"Alternatively, apply the ignoreFieldBridge() option to " +
 					"pass String parameters" );
 		}
-		Reader reader = new StringReader(localText);
-		TokenStream stream = analyzer.reusableTokenStream( fieldName, reader);
-		CharTermAttribute attribute = stream.addAttribute( CharTermAttribute.class );
-		stream.reset();
-
-		while ( stream.incrementToken() ) {
-			if ( attribute.length() > 0 ) {
-				String term = new String( attribute.buffer(), 0, attribute.length() );
-				terms.add( term );
+		final Reader reader = new StringReader( localText );
+		final TokenStream stream = analyzer.tokenStream( fieldName, reader);
+		try {
+			CharTermAttribute attribute = stream.addAttribute( CharTermAttribute.class );
+			stream.reset();
+			while ( stream.incrementToken() ) {
+				if ( attribute.length() > 0 ) {
+					String term = new String( attribute.buffer(), 0, attribute.length() );
+					terms.add( term );
+				}
 			}
+			stream.end();
 		}
-		stream.end();
-		stream.close();
+		finally {
+			stream.close();
+		}
 		return terms;
 	}
 
-	static DocumentBuilderIndexedEntity<?> getDocumentBuilder(QueryBuildingContext queryContext) {
-		final SearchFactoryImplementor factory = queryContext.getFactory();
+	static DocumentBuilderIndexedEntity getDocumentBuilder(QueryBuildingContext queryContext) {
+		final ExtendedSearchIntegrator factory = queryContext.getFactory();
 		final Class<?> type = queryContext.getEntityType();
-		EntityIndexBinder indexBinding = factory.getIndexBindingForEntity( type );
+		EntityIndexBinding indexBinding = factory.getIndexBinding( type );
 		if ( indexBinding == null ) {
 			throw new AssertionFailure( "Class is not indexed: " + type );
 		}

@@ -1,47 +1,37 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2012 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.id;
 
 import java.lang.annotation.ElementType;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.TermQuery;
 import org.hibernate.Session;
 import org.hibernate.Transaction;
-import org.hibernate.cfg.Configuration;
-import org.hibernate.search.Environment;
+import org.hibernate.search.cfg.Environment;
 import org.hibernate.search.Search;
 import org.hibernate.search.cfg.SearchMapping;
-import org.hibernate.search.test.SearchTestCase;
+import org.hibernate.search.test.SearchTestBase;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
 
 
 /**
  * Copied from EmbeddedIdTest, but using programmatic mapping instead.
  *
  * @author Emmanuel Bernard
- * @author Sanne Grinovero <sanne@hibernate.org> (C) 2012 Red Hat Inc.
+ * @author Sanne Grinovero (C) 2012 Red Hat Inc.
  */
-public class ProgrammaticEmbeddedItTest extends SearchTestCase {
+public class ProgrammaticEmbeddedItTest extends SearchTestBase {
 
+	@Test
 	public void testFieldBridge() throws Exception {
 		PersonPK emmanuelPk = new PersonPK();
 		emmanuelPk.setFirstName( "Emmanuel" );
@@ -79,8 +69,7 @@ public class ProgrammaticEmbeddedItTest extends SearchTestCase {
 	}
 
 	@Override
-	protected void configure(Configuration cfg) {
-		super.configure( cfg );
+	public void configure(Map<String,Object> cfg) {
 		SearchMapping mapping = new SearchMapping();
 		mapping
 			.entity( PlainPerson.class )
@@ -90,11 +79,11 @@ public class ProgrammaticEmbeddedItTest extends SearchTestCase {
 				.bridge( PersonPKBridge.class )
 			.property( "", ElementType.FIELD )
 				.field();
-		cfg.getProperties().put( Environment.MODEL_MAPPING, mapping );
+		cfg.put( Environment.MODEL_MAPPING, mapping );
 	}
 
 	@Override
-	protected Class<?>[] getAnnotatedClasses() {
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[]{ PlainPerson.class };
 	}
 

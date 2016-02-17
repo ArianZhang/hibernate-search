@@ -1,82 +1,48 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2012 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.configuration;
 
-import java.lang.annotation.ElementType;
-
-import org.hibernate.search.annotations.DocumentId;
-import org.hibernate.search.annotations.Field;
-import org.hibernate.search.annotations.Indexed;
-import org.hibernate.search.backend.impl.lucene.AbstractWorkspaceImpl;
-import org.hibernate.search.backend.impl.lucene.LuceneBackendQueueProcessor;
-import org.hibernate.search.cfg.SearchMapping;
-import org.hibernate.search.engine.spi.EntityIndexBinder;
-import org.hibernate.search.impl.MutableSearchFactory;
-import org.hibernate.search.indexes.impl.DirectoryBasedIndexManager;
-import org.hibernate.search.spi.SearchFactoryBuilder;
-import org.hibernate.search.test.util.ManualConfiguration;
+import org.hibernate.search.engine.impl.MutableSearchFactory;
+import org.hibernate.search.testsupport.setup.SearchConfigurationForTest;
 import org.junit.Test;
 
-import static junit.framework.Assert.assertEquals;
+import static org.junit.Assert.assertEquals;
 
 
 /**
- * Verifies the global setting from {@link SearchConfiguration#isIndexMetadataComplete()}
+ * Verifies the global setting from {@link org.hibernate.search.cfg.spi.SearchConfiguration#isIndexMetadataComplete()}
  * affect the backends as expected.
  *
- * @author Sanne Grinovero <sanne@hibernate.org> (C) 2012 Red Hat Inc.
+ * @author Sanne Grinovero (C) 2012 Red Hat Inc.
  */
-public class IndexMetadataCompleteConfiguredTest {
+public class IndexMetadataCompleteConfiguredTest extends BaseConfigurationTest {
 
 	@Test
 	public void testDefaultImplementation() {
-		ManualConfiguration cfg = new ManualConfiguration();
+		SearchConfigurationForTest cfg = new SearchConfigurationForTest();
 		verifyIndexCompleteMetadataOption( true, cfg );
 	}
 
 	@Test
 	public void testIndexMetadataCompleteFalse() {
-		ManualConfiguration cfg = new ManualConfiguration();
+		SearchConfigurationForTest cfg = new SearchConfigurationForTest();
 		cfg.setIndexMetadataComplete( false );
 		verifyIndexCompleteMetadataOption( false, cfg );
 	}
 
 	@Test
 	public void testIndexMetadataCompleteTrue() {
-		ManualConfiguration cfg = new ManualConfiguration();
+		SearchConfigurationForTest cfg = new SearchConfigurationForTest();
 		cfg.setIndexMetadataComplete( true );
 		verifyIndexCompleteMetadataOption( true, cfg );
 	}
 
-	private void verifyIndexCompleteMetadataOption(boolean expectation, ManualConfiguration cfg) {
-		SearchMapping mapping = new SearchMapping();
-		mapping
-			.entity( Document.class ).indexed().indexName( "index1" )
-			.property( "id", ElementType.FIELD ).documentId()
-			.property( "title", ElementType.FIELD ).field()
-			;
-		cfg.setProgrammaticMapping( mapping );
-		cfg.addProperty( "hibernate.search.default.directory_provider", "ram" );
-		cfg.addClass( Document.class );
-		MutableSearchFactory sf = (MutableSearchFactory) new SearchFactoryBuilder().configuration( cfg ).buildSearchFactory();
+	private void verifyIndexCompleteMetadataOption(boolean expectation, SearchConfigurationForTest cfg) {
+		MutableSearchFactory sf = getMutableSearchFactoryWithSingleEntity( cfg );
 		try {
 			assertEquals( expectation, extractWorkspace( sf, Document.class ).areSingleTermDeletesSafe() );
 
@@ -94,28 +60,4 @@ public class IndexMetadataCompleteConfiguredTest {
 		}
 	}
 
-	private static AbstractWorkspaceImpl extractWorkspace(MutableSearchFactory sf, Class<?> type) {
-		EntityIndexBinder indexBindingForEntity = sf.getIndexBindingForEntity( type );
-		DirectoryBasedIndexManager indexManager = (DirectoryBasedIndexManager) indexBindingForEntity.getIndexManagers()[0];
-		LuceneBackendQueueProcessor backend = (LuceneBackendQueueProcessor) indexManager.getBackendQueueProcessor();
-		AbstractWorkspaceImpl workspace = backend.getIndexResources().getWorkspace();
-		return workspace;
-	}
-
-	public static final class Document {
-		long id;
-		String title;
-	}
-
-	@Indexed(index = "index1")
-	public static final class Dvd {
-		@DocumentId long id;
-		@Field String title;
-	}
-
-	@Indexed(index = "index2")
-	public static final class Book {
-		@DocumentId long id;
-		@Field String title;
-	}
 }

@@ -1,31 +1,16 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2011, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.jpa;
 
 import javax.persistence.EntityManager;
 
-import org.hibernate.search.jpa.impl.FullTextEntityManagerImpl;
+import org.hibernate.search.jpa.impl.ImplementationFactory;
+import org.hibernate.search.util.logging.impl.Log;
+import org.hibernate.search.util.logging.impl.LoggerFactory;
 
 /**
  * Helper class that should be used when building a FullTextEntityManager
@@ -35,19 +20,30 @@ import org.hibernate.search.jpa.impl.FullTextEntityManagerImpl;
  */
 public final class Search {
 
+	private static final Log log = LoggerFactory.make();
+
 	private Search() {
 	}
 
 	/**
 	 * Build a full text capable EntityManager
 	 * The underlying EM implementation has to be Hibernate EntityManager
+	 * The created instance depends on the passed Session: closing either of them will
+	 * close both instances. They both share the same persistence context.
+	 *
+	 * @param em the entityManager instance to use
+	 * @return a FullTextEntityManager, wrapping the passed EntityManager
+	 * @throws IllegalArgumentException if passed null
 	 */
 	public static FullTextEntityManager getFullTextEntityManager(EntityManager em) {
-		if ( em instanceof FullTextEntityManager ) {
+		if ( em == null ) {
+			throw log.getNullEntityManagerPassedToFullEntityManagerCreationException();
+		}
+		else if ( em instanceof FullTextEntityManager ) {
 			return (FullTextEntityManager) em;
 		}
 		else {
-			return new FullTextEntityManagerImpl( em );
+			return ImplementationFactory.createFullTextEntityManager( em );
 		}
 	}
 

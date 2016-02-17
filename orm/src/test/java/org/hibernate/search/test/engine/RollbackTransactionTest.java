@@ -1,36 +1,24 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.engine;
 
-import org.apache.lucene.analysis.SimpleAnalyzer;
+import java.util.Map;
+
+import org.apache.lucene.analysis.core.SimpleAnalyzer;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.hibernate.Transaction;
-import org.hibernate.search.Environment;
 import org.hibernate.search.FullTextQuery;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.test.SearchTestCase;
+import org.hibernate.search.cfg.Environment;
+import org.hibernate.search.test.SearchTestBase;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
 
 /**
  * Verify index changes queued during a transaction are canceled
@@ -38,8 +26,9 @@ import org.hibernate.search.test.SearchTestCase;
  *
  * @author Sanne Grinovero
  */
-public class RollbackTransactionTest extends SearchTestCase {
+public class RollbackTransactionTest extends SearchTestBase {
 
+	@Test
 	public void testTransactionBehaviour() {
 		assertEquals( 0, countBusLinesByFullText() );
 		assertEquals( 0, countBusLineByDatabaseCount() );
@@ -96,16 +85,15 @@ public class RollbackTransactionTest extends SearchTestCase {
 
 	// Test setup options - Entities
 	@Override
-	protected Class<?>[] getAnnotatedClasses() {
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] { BusLine.class, BusStop.class };
 	}
 
 	// Test setup options - SessionFactory Properties
 	@Override
-	protected void configure(org.hibernate.cfg.Configuration configuration) {
-		super.configure( configuration );
-		cfg.setProperty( "hibernate.search.default.directory_provider", "ram" );
-		cfg.setProperty( Environment.ANALYZER_CLASS, SimpleAnalyzer.class.getName() );
+	public void configure(Map<String,Object> cfg) {
+		cfg.put( "hibernate.search.default.directory_provider", "ram" );
+		cfg.put( Environment.ANALYZER_CLASS, SimpleAnalyzer.class.getName() );
 	}
 
 }

@@ -1,52 +1,46 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.bridge.builtin.impl;
 
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Fieldable;
 
+import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.search.Query;
 import org.hibernate.search.bridge.LuceneOptions;
 import org.hibernate.search.bridge.TwoWayFieldBridge;
+import org.hibernate.search.engine.impl.nullencoding.NullMarkerCodec;
+import org.hibernate.search.util.logging.impl.Log;
+import org.hibernate.search.util.logging.impl.LoggerFactory;
 
 /**
  * @author Hardy Ferentschik
  */
 public class NullEncodingTwoWayFieldBridge implements TwoWayFieldBridge {
 
-	private final TwoWayFieldBridge fieldBridge;
-	private final String nullMarker;
+	private static final Log LOG = LoggerFactory.make();
 
-	public NullEncodingTwoWayFieldBridge(TwoWayFieldBridge fieldBridge, String nullMarker) {
+	private final TwoWayFieldBridge fieldBridge;
+	private final NullMarkerCodec nullTokenCodec;
+
+	public NullEncodingTwoWayFieldBridge(TwoWayFieldBridge fieldBridge, NullMarkerCodec nullTokenCodec) {
 		this.fieldBridge = fieldBridge;
-		this.nullMarker = nullMarker;
+		this.nullTokenCodec = nullTokenCodec;
 	}
 
+	@Override
 	public Object get(String name, Document document) {
-		Fieldable field = document.getFieldable( name );
-		String stringValue = field.stringValue();
-		if ( nullMarker.equals( stringValue ) ) {
+		final IndexableField field = document.getField( name );
+		if ( field == null ) {
+			//Avoid an NPE if the field isn't defined
+			LOG.loadingNonExistentField( name );
+			return null;
+		}
+		if ( nullTokenCodec.representsNullValue( field ) ) {
 			return null;
 		}
 		else {
@@ -54,9 +48,10 @@ public class NullEncodingTwoWayFieldBridge implements TwoWayFieldBridge {
 		}
 	}
 
+	@Override
 	public String objectToString(Object object) {
 		if ( object == null ) {
-			return nullMarker;
+			return nullTokenCodec.nullRepresentedAsString();
 		}
 		else {
 			return fieldBridge.objectToString( object );
@@ -67,7 +62,18 @@ public class NullEncodingTwoWayFieldBridge implements TwoWayFieldBridge {
 		return fieldBridge;
 	}
 
+	@Override
 	public void set(String name, Object value, Document document, LuceneOptions luceneOptions) {
-		fieldBridge.set( name, value, document, luceneOptions );
+		if ( value == null ) {
+			nullTokenCodec.encodeNullValue( name, document, luceneOptions );
+		}
+		else {
+			fieldBridge.set( name, value, document, luceneOptions );
+		}
 	}
+
+	public Query buildNullQuery(String fieldName) {
+		return nullTokenCodec.createNullMatchingQuery( fieldName );
+	}
+
 }

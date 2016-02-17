@@ -1,44 +1,34 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.embedded.nullindexed;
 
 import java.util.List;
 
 import org.apache.lucene.search.Query;
+
 import org.hibernate.Session;
 import org.hibernate.Transaction;
+
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.SearchException;
+import org.hibernate.search.exception.SearchException;
 import org.hibernate.search.query.dsl.QueryBuilder;
-import org.hibernate.search.test.SearchTestCase;
+import org.hibernate.search.test.SearchTestBase;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 /**
  * @author Davide D'Alto
  */
-public class NullEmbeddedTest extends SearchTestCase {
+public class NullEmbeddedTest extends SearchTestBase {
 
+	@Test
 	public void testEmbeddedNullNotIndexedQuery() throws Exception {
 		Man withoutPuppies = new Man( "Davide" );
 		withoutPuppies.setPartner( null );
@@ -87,6 +77,7 @@ public class NullEmbeddedTest extends SearchTestCase {
 		s.close();
 	}
 
+	@Test
 	public void testNestedEmebeddedNullIndexing() throws Exception {
 		Man withPet = new Man( "Davide" );
 
@@ -131,10 +122,11 @@ public class NullEmbeddedTest extends SearchTestCase {
 		s.close();
 	}
 
+	@Test
 	public void testEmbeddedNullIndexing() throws Exception {
 		Man me = new Man( "Davide" );
 		Pet dog = new Pet( "dog" );
-		me.setPet( null  );
+		me.setPet( null );
 
 		Man someoneElse = new Man( "Omar" );
 
@@ -154,7 +146,7 @@ public class NullEmbeddedTest extends SearchTestCase {
 		s.persist( puppy2 );
 		tx.commit();
 
-		List<Man> result = findNullsFor( session, "pet", Man.NO_PET );
+		List<Man> result = findNullsFor( getSession(), "pet", Man.NO_PET );
 		assertEquals( "Wrong number of results found", 1, result.size() );
 		assertEquals( "Wrong result returned", me, result.get( 0 ) );
 
@@ -181,7 +173,8 @@ public class NullEmbeddedTest extends SearchTestCase {
 		return result;
 	}
 
-	protected Class<?>[] getAnnotatedClasses() {
+	@Override
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] { Man.class, Pet.class, Puppy.class, Woman.class };
 	}
 }

@@ -1,121 +1,59 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2012, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.analyzer;
 
-import java.io.IOException;
-import java.io.Reader;
-import java.util.Collections;
 import java.util.Map;
 
-import org.apache.lucene.analysis.Tokenizer;
-import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
-import org.apache.solr.analysis.TokenizerFactory;
+import org.apache.lucene.analysis.util.TokenizerFactory;
+import org.apache.lucene.util.AttributeFactory;
 
 /**
  * @author Emmanuel Bernard
+ * @author Sanne Grinovero
  */
-public abstract class TestTokenizer extends Tokenizer implements TokenizerFactory {
-	private final CharTermAttribute termAttribute = addAttribute( CharTermAttribute.class );
-	private int i = 0;
+public abstract class TestTokenizer extends TokenizerFactory {
 
-	public TestTokenizer(Reader input) {
-		super( input );
-	}
-
-	public abstract String[] getTokens();
-
-	@Override
-	public final boolean incrementToken() throws IOException {
-		if ( i < getTokens().length ) {
-			clearAttributes();
-			termAttribute.append( getTokens()[i] );
-			i++;
-			return true;
+	protected TestTokenizer(Map<String, String> args) {
+		super( args );
+		if ( !args.isEmpty() ) {
+			throw new IllegalArgumentException( "Unknown parameters: " + args );
 		}
-		return false;
 	}
 
 	@Override
-	public void init(Map<String, String> args) {
-	}
-
-	@Override
-	public Map<String, String> getArgs() {
-		return Collections.emptyMap();
-	}
+	public abstract StreamWrappingTokenizer create(AttributeFactory factory);
 
 	public static class TestTokenizer1 extends TestTokenizer {
-		private final String[] tokens = { "dog" };
-
-		public TestTokenizer1() {
-			super( null );
+		public TestTokenizer1(Map<String, String> args) {
+			super( args );
 		}
-
 		@Override
-		public String[] getTokens() {
-			return tokens;
-		}
-
-		@Override
-		public Tokenizer create(Reader input) {
-			return this;
+		public StreamWrappingTokenizer create(AttributeFactory factory) {
+			return new StreamWrappingTokenizer( new String[]{ "dog" } );
 		}
 	}
 
 	public static class TestTokenizer2 extends TestTokenizer {
-		private final String[] tokens = { "cat" };
-
-		public TestTokenizer2() {
-			super( null );
+		public TestTokenizer2(Map<String, String> args) {
+			super( args );
 		}
-
 		@Override
-		public String[] getTokens() {
-			return tokens;
-		}
-
-		@Override
-		public Tokenizer create(Reader input) {
-			return this;
+		public StreamWrappingTokenizer create(AttributeFactory factory) {
+			return new StreamWrappingTokenizer( new String[]{ "cat" } );
 		}
 	}
 
 	public static class TestTokenizer3 extends TestTokenizer {
-		private final String[] tokens = { "mouse" };
-
-		public TestTokenizer3() {
-			super( null );
+		public TestTokenizer3(Map<String, String> args) {
+			super( args );
 		}
-
 		@Override
-		public String[] getTokens() {
-			return tokens;
-		}
-
-		@Override
-		public Tokenizer create(Reader input) {
-			return this;
+		public StreamWrappingTokenizer create(AttributeFactory factory) {
+			return new StreamWrappingTokenizer( new String[]{ "mouse" } );
 		}
 	}
 }

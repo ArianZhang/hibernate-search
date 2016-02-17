@@ -1,29 +1,14 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2013 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.embedded.update;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-
 import javax.persistence.CascadeType;
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
@@ -33,7 +18,9 @@ import javax.persistence.OneToOne;
 
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.TermQuery;
+
 import org.hibernate.Transaction;
+
 import org.hibernate.search.FullTextQuery;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
@@ -41,17 +28,22 @@ import org.hibernate.search.annotations.DocumentId;
 import org.hibernate.search.annotations.Field;
 import org.hibernate.search.annotations.Indexed;
 import org.hibernate.search.annotations.IndexedEmbedded;
-import org.hibernate.search.test.SearchTestCase;
-import org.hibernate.search.test.util.TestForIssue;
+import org.hibernate.search.test.SearchTestBase;
+import org.hibernate.search.testsupport.TestForIssue;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 /**
  * Unit test about updating an entity with collection marked with @IndexedEmbedded annotation
  *
  * @author Davide Di Somma <davide.disomma@gmail.com>
  */
-public class UpdateIndexedEmbeddedCollectionTest extends SearchTestCase {
+public class UpdateIndexedEmbeddedCollectionTest extends SearchTestBase {
 
 	@TestForIssue(jiraKey = "HSEARCH-734")
+	@Test
 	public void testUpdateIndexedEmbeddedCollectionWithNull() throws Exception {
 
 		// load the truck with number plate "LVN 746 XD" guided by driver Mark Smith
@@ -135,16 +127,20 @@ public class UpdateIndexedEmbeddedCollectionTest extends SearchTestCase {
 	}
 
 	@Override
-	protected Class<?>[] getAnnotatedClasses() {
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] { Driver.class, Truck.class, Item.class };
 	}
 
-	@Entity
+	@Entity(name = "Driver")
 	@Indexed
 	public static class Driver {
+
 		public Driver(String firstName, String lastName) {
 			this.firstName = firstName;
 			this.lastName = lastName;
+		}
+
+		public Driver() {
 		}
 
 		@Id @GeneratedValue @DocumentId
@@ -162,21 +158,27 @@ public class UpdateIndexedEmbeddedCollectionTest extends SearchTestCase {
 		public void setLastName(String lastName) { this.lastName = lastName; }
 		private String lastName;
 
-		@IndexedEmbedded @OneToOne(cascade = CascadeType.ALL)
+		@IndexedEmbedded(includeEmbeddedObjectId = true)
+		@OneToOne(cascade = CascadeType.ALL)
 		public Truck getTruck() { return truck; }
 		public void setTruck(Truck truck) { this.truck = truck; }
 		private Truck truck;
 	}
 
-	@Entity
+	@Entity(name = "Truck")
 	@Indexed
 	public static class Truck {
+
 		public Truck(String numberPlate) {
 			super();
 			this.numberPlate = numberPlate;
 		}
 
-		@Id @GeneratedValue @DocumentId
+		public Truck() {
+		}
+
+		@Id
+		@GeneratedValue
 		public Long getId() { return id; }
 		public void setId(Long id) { this.id = id; }
 		private Long id;
@@ -192,13 +194,16 @@ public class UpdateIndexedEmbeddedCollectionTest extends SearchTestCase {
 		private Set<Item> items;
 	}
 
-	@Entity
+	@Entity(name = "Item")
 	@Indexed
 	public static class Item {
 		public Item(String description, Integer quantity) {
 			super();
 			this.description = description;
 			this.quantity = quantity;
+		}
+
+		public Item() {
 		}
 
 		@Id @GeneratedValue @DocumentId

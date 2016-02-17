@@ -1,22 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2012 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.spatial;
 
@@ -25,16 +11,18 @@ import java.beans.PropertyDescriptor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import org.apache.lucene.document.Document;
 
-import org.hibernate.search.bridge.FieldBridge;
+import org.apache.lucene.document.Document;
 import org.hibernate.search.bridge.LuceneOptions;
+import org.hibernate.search.bridge.MetadataProvidingFieldBridge;
+import org.hibernate.search.bridge.spi.FieldMetadataBuilder;
+import org.hibernate.search.bridge.spi.FieldType;
 import org.hibernate.search.util.logging.impl.Log;
 import org.hibernate.search.util.logging.impl.LoggerFactory;
 
 import static java.util.Locale.ENGLISH;
 
-public abstract class SpatialFieldBridge implements FieldBridge {
+public abstract class SpatialFieldBridge implements MetadataProvidingFieldBridge {
 
 	private static final Log LOG = LoggerFactory.make();
 
@@ -53,10 +41,16 @@ public abstract class SpatialFieldBridge implements FieldBridge {
 				Coordinates coordinates = (Coordinates) value;
 				return coordinates.getLatitude();
 			}
-			catch ( ClassCastException e ) {
+			catch (ClassCastException e) {
 				throw LOG.cannotExtractCoordinateFromObject( value.getClass().getName() );
 			}
 		}
+	}
+
+	@Override
+	public void configureFieldMetadata(String name, FieldMetadataBuilder builder) {
+		builder.field( name, FieldType.DOUBLE )
+			.sortable( true );
 	}
 
 	private Double getCoordinateFromField(String coordinateField, Object value) {
@@ -65,9 +59,9 @@ public abstract class SpatialFieldBridge implements FieldBridge {
 			Field latitude = clazz.getField( coordinateField );
 			return (Double) latitude.get( value );
 		}
-		catch ( NoSuchFieldException e ) {
+		catch (NoSuchFieldException e) {
 			try {
-				PropertyDescriptor propertyDescriptor =  new PropertyDescriptor(
+				PropertyDescriptor propertyDescriptor = new PropertyDescriptor(
 						coordinateField,
 						clazz,
 						"get" + capitalize( coordinateField ),
@@ -80,17 +74,17 @@ public abstract class SpatialFieldBridge implements FieldBridge {
 					throw LOG.cannotReadFieldForClass( coordinateField, clazz.getName() );
 				}
 			}
-			catch ( IllegalAccessException ex ) {
+			catch (IllegalAccessException ex) {
 				throw LOG.cannotReadFieldForClass( coordinateField, clazz.getName() );
 			}
-			catch ( InvocationTargetException ex ) {
+			catch (InvocationTargetException ex) {
 				throw LOG.cannotReadFieldForClass( coordinateField, clazz.getName() );
 			}
-			catch ( IntrospectionException ex ) {
+			catch (IntrospectionException ex) {
 				throw LOG.cannotReadFieldForClass( coordinateField, clazz.getName() );
 			}
 		}
-		catch ( IllegalAccessException e ) {
+		catch (IllegalAccessException e) {
 			throw LOG.cannotReadFieldForClass( coordinateField, clazz.getName() );
 		}
 	}
@@ -104,7 +98,7 @@ public abstract class SpatialFieldBridge implements FieldBridge {
 				Coordinates coordinates = (Coordinates) value;
 				return coordinates.getLongitude();
 			}
-			catch ( ClassCastException e ) {
+			catch (ClassCastException e) {
 				throw LOG.cannotExtractCoordinateFromObject( value.getClass().getName() );
 			}
 		}

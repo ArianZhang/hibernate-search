@@ -1,38 +1,21 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.directoryProvider;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.util.Properties;
 
-import org.hibernate.search.SearchException;
+import org.hibernate.search.exception.SearchException;
 import org.hibernate.search.store.impl.DirectoryProviderHelper;
 import org.hibernate.search.util.impl.FileHelper;
 import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 /**
  * @author Gavin King
@@ -41,23 +24,7 @@ import org.junit.Test;
 public class DirectoryProviderHelperTest {
 
 	@Test
-	public void testMkdirsDetermineIndex() {
-		String root = "./testDir/dir1/dir2";
-		String relative = "dir3";
-
-		Properties properties = new Properties();
-		properties.put( "indexBase", root );
-		properties.put( "indexName", relative );
-
-		DirectoryProviderHelper.getVerifiedIndexDir( "name", properties, true );
-
-		assertTrue( new File( root ).exists() );
-
-		FileHelper.delete( new File( "./testDir" ) );
-	}
-
-	@Test
-	public void testMkdirsGetSource() {
+	public void testMkdirsGetSource() throws Exception {
 		String root = "./testDir";
 		String relative = "dir1/dir2/dir3";
 
@@ -94,7 +61,7 @@ public class DirectoryProviderHelperTest {
 		try {
 			DirectoryProviderHelper.getCopyBufferSize( "testIdx", prop );
 		}
-		catch ( SearchException e ) {
+		catch (SearchException e) {
 			testOk = true;
 		}
 		assertTrue( testOk );
@@ -103,7 +70,7 @@ public class DirectoryProviderHelperTest {
 		try {
 			DirectoryProviderHelper.getCopyBufferSize( "testIdx", prop );
 		}
-		catch ( SearchException e ) {
+		catch (SearchException e) {
 			testOk = true;
 		}
 		assertTrue( testOk );

@@ -1,24 +1,14 @@
 /*
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
+ * Hibernate Search, full-text search for your domain model
  *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.bridge.builtin;
 
 import org.apache.lucene.document.Document;
+
+import org.hibernate.search.bridge.ContainerBridge;
 import org.hibernate.search.bridge.FieldBridge;
 import org.hibernate.search.bridge.LuceneOptions;
 
@@ -30,28 +20,27 @@ import org.hibernate.search.bridge.LuceneOptions;
  *
  * @author Davide D'Alto
  */
-public class IterableBridge implements FieldBridge {
+public class IterableBridge implements FieldBridge, ContainerBridge {
 
 	private final FieldBridge bridge;
 
 	/**
-	 * @param bridge
-	 *            the {@link org.hibernate.search.bridge.FieldBridge} used for each entry of the {@link java.lang.Iterable} object.
+	 * @param bridge the {@link org.hibernate.search.bridge.FieldBridge} used for each entry of the {@link java.lang.Iterable} object.
 	 */
 	public IterableBridge(FieldBridge bridge) {
 		this.bridge = bridge;
 	}
 
-	/*
-	 * (non-Javadoc)
-	 *
-	 * @see org.hibernate.search.bridge.FieldBridge#set(java.lang.String, java.lang.Object, org.apache.lucene.document.Document, org.hibernate.search.bridge.LuceneOptions)
-	 */
 	@Override
 	public void set(String fieldName, Object value, Document document, LuceneOptions luceneOptions) {
 		if ( value != null ) {
 			indexNotNullIterable( fieldName, value, document, luceneOptions );
 		}
+	}
+
+	@Override
+	public FieldBridge getElementBridge() {
+		return bridge;
 	}
 
 	private void indexNotNullIterable(String name, Object value, Document document, LuceneOptions luceneOptions) {

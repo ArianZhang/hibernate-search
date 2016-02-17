@@ -1,31 +1,15 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search;
 
 import java.io.Serializable;
 
 import org.hibernate.Session;
+import org.hibernate.search.query.engine.spi.QueryDescriptor;
 
 /**
  * Extends the Hibernate {@link Session} with fulltext search and indexing capabilities.
@@ -49,6 +33,11 @@ public interface FullTextSession extends Session {
 	FullTextQuery createFullTextQuery(org.apache.lucene.search.Query luceneQuery, Class<?>... entities);
 
 	/**
+	 * Creates a fulltext query from the given query descriptor.
+	 */
+	FullTextQuery createFullTextQuery(QueryDescriptor descriptor, Class<?>... entities);
+
+	/**
 	 * Force the (re)indexing of a given <b>managed</b> object.
 	 * Indexation is batched per transaction: if a transaction is active, the operation
 	 * will not affect the index at least until commit.
@@ -56,6 +45,7 @@ public interface FullTextSession extends Session {
 	 * Any {@link org.hibernate.search.indexes.interceptor.EntityIndexingInterceptor} registered on the entity will be ignored:
 	 * this method forces an index operation.
 	 *
+	 * @param <T> the type of the entity to index
 	 * @param entity The entity to index - must not be <code>null</code>.
 	 *
 	 * @throws IllegalArgumentException if entity is null or not an @Indexed entity
@@ -75,6 +65,7 @@ public interface FullTextSession extends Session {
 	 * Any {@link org.hibernate.search.indexes.interceptor.EntityIndexingInterceptor} registered on the entity will be ignored:
 	 * this method forces a purge operation.
 	 *
+	 * @param <T> the type of the entity to purge
 	 * @param entityType The type of the entity to delete.
 	 * @param id The id of the entity to delete.
 	 *
@@ -87,6 +78,7 @@ public interface FullTextSession extends Session {
 	 *
 	 * Any {@link org.hibernate.search.indexes.interceptor.EntityIndexingInterceptor} registered on the entity type will be ignored.
 	 *
+	 * @param <T> the type of the entity to purge
 	 * @param entityType The class of the entities to remove.
 	 *
 	 * @throws IllegalArgumentException if entityType is <code>null</code> or not a class or superclass annotated with <code>@Indexed</code>.

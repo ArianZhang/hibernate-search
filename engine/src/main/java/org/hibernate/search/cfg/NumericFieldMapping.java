@@ -1,22 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2012 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.cfg;
 
@@ -28,10 +14,19 @@ import java.util.Map;
  */
 public class NumericFieldMapping extends FieldMapping {
 
-	private final Map<String, Object> numericField = new HashMap<String, Object>();
+	private final Map<String, Object> numericField = new HashMap<String, Object>( 2 );
 
+	/**
+	 * @deprecated Use {@link #NumericFieldMapping(String, PropertyDescriptor, EntityDescriptor, SearchMapping)} instead.
+	 */
+	@Deprecated
 	public NumericFieldMapping(PropertyDescriptor property, EntityDescriptor entity, SearchMapping mapping) {
+		this( property.getName(), property, entity, mapping );
+	}
+
+	public NumericFieldMapping(String fieldName, PropertyDescriptor property, EntityDescriptor entity, SearchMapping mapping) {
 		super( property, entity, mapping );
+		numericField.put( "forField", fieldName );
 		property.addNumericField( numericField );
 	}
 
@@ -39,5 +34,4 @@ public class NumericFieldMapping extends FieldMapping {
 		numericField.put( "precisionStep", precisionStep );
 		return this;
 	}
-
 }

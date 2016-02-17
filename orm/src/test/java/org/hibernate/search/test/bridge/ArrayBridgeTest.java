@@ -1,48 +1,42 @@
 /*
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
+ * Hibernate Search, full-text search for your domain model
  *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.bridge;
-
-import static org.hibernate.search.test.bridge.ArrayBridgeTestEntity.Language.ENGLISH;
-import static org.hibernate.search.test.bridge.ArrayBridgeTestEntity.Language.ITALIAN;
-import static org.hibernate.search.test.bridge.ArrayBridgeTestEntity.Language.KLINGON;
 
 import java.util.Date;
 import java.util.List;
 
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.document.DateTools;
 import org.apache.lucene.search.Query;
+import org.junit.Before;
+import org.junit.Test;
+
 import org.hibernate.Session;
 import org.hibernate.Transaction;
+
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.SearchFactory;
 import org.hibernate.search.bridge.util.impl.NumericFieldUtils;
 import org.hibernate.search.query.dsl.QueryBuilder;
-import org.hibernate.search.test.SearchTestCase;
+import org.hibernate.search.query.dsl.TermMatchingContext;
+import org.hibernate.search.test.SearchTestBase;
 import org.hibernate.search.test.bridge.ArrayBridgeTestEntity.Language;
+
+import static org.hibernate.search.test.bridge.ArrayBridgeTestEntity.Language.ENGLISH;
+import static org.hibernate.search.test.bridge.ArrayBridgeTestEntity.Language.ITALIAN;
+import static org.hibernate.search.test.bridge.ArrayBridgeTestEntity.Language.KLINGON;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 /**
  * Test indexing of {@link javax.persistence.ElementCollection} annotated elements.
  *
  * @author Davide D'Alto
  */
-public class ArrayBridgeTest extends SearchTestCase {
+public class ArrayBridgeTest extends SearchTestBase {
 
 	private FullTextSession fullTextSession;
 	private ArrayBridgeTestEntity withoutNull;
@@ -51,18 +45,12 @@ public class ArrayBridgeTest extends SearchTestCase {
 	private Date indexedDate;
 
 	@Override
+	@Before
 	public void setUp() throws Exception {
 		super.setUp();
 		Session session = openSession();
 		fullTextSession = Search.getFullTextSession( session );
 		prepareData();
-	}
-
-	@Override
-	public void tearDown() throws Exception {
-		cleanData();
-		assertTrue( indexIsEmpty() );
-		super.tearDown();
 	}
 
 	private void prepareData() {
@@ -95,41 +83,48 @@ public class ArrayBridgeTest extends SearchTestCase {
 		tx.commit();
 	}
 
+	@Test
 	public void testSearchNullEntry() throws Exception {
-		List<ArrayBridgeTestEntity> results = findResults( "nullIndexed", ArrayBridgeTestEntity.NULL_TOKEN );
+		List<ArrayBridgeTestEntity> results = findResults( "nullIndexed", ArrayBridgeTestEntity.NULL_TOKEN, true );
 
 		assertNotNull( "No result found for an indexed collection", results );
 		assertEquals( "Unexpected number of results in a collection", 1, results.size() );
 		assertEquals( "Wrong result returned looking for a null in a collection", withNullEntry.getName(), results.get( 0 ).getName() );
 	}
 
+	@Test
 	public void testSearchNullEmbedded() throws Exception {
-		List<ArrayBridgeTestEntity> results = findEmbeddedNullResults( "nullIndexed", ArrayBridgeTestEntity.NULL_EMBEDDED );
+		List<ArrayBridgeTestEntity> results = findEmbeddedNullResults( "nullIndexed", ArrayBridgeTestEntity.NULL_EMBEDDED, true );
 
 		assertNotNull( "No result found for an indexed collection", results );
 		assertEquals( "Unexpected number of results in a collection", 1, results.size() );
 		assertEquals( "Wrong result returned looking for a null in a collection", withNullEmbedded.getName(), results.get( 0 ).getName() );
 	}
 
+	@Test
 	public void testSearchNullNumericEmbedded() throws Exception {
-		List<ArrayBridgeTestEntity> results = findEmbeddedNullResults( "embeddedNum", ArrayBridgeTestEntity.NULL_EMBEDDED_NUMERIC );
+		List<ArrayBridgeTestEntity> results =
+				findEmbeddedNullResults( "embeddedNum", ArrayBridgeTestEntity.NULL_EMBEDDED_NUMERIC, true );
 
 		assertNotNull( "No result found for an indexed collection", results );
 		assertEquals( "Unexpected number of results in a collection", 1, results.size() );
 		assertEquals( "Wrong result returned looking for a null in a collection of numeric", withNullEmbedded.getName(), results.get( 0 ).getName() );
 	}
 
+	@Test
 	public void testSearchNullNumericEntry() throws Exception {
-		List<ArrayBridgeTestEntity> results = findResults( "numericNullIndexed", ArrayBridgeTestEntity.NULL_NUMERIC_TOKEN );
+		List<ArrayBridgeTestEntity> results =
+				findResults( "numericNullIndexed", ArrayBridgeTestEntity.NULL_NUMERIC_TOKEN, true );
 
 		assertNotNull( "No result found for an indexed collection", results );
 		assertEquals( "Unexpected number of results in a collection", 1, results.size() );
 		assertEquals( "Wrong result returned looking for a null in a collection of numeric", withNullEntry.getName(), results.get( 0 ).getName() );
 	}
 
+	@Test
 	public void testSearchNotNullEntry() throws Exception {
 		{
-			List<ArrayBridgeTestEntity> results = findResults( "nullIndexed", KLINGON );
+			List<ArrayBridgeTestEntity> results = findResults( "nullIndexed", KLINGON, false );
 
 			assertNotNull( "No result found for an indexed collection", results );
 			assertEquals( "Wrong number of results returned for an indexed collection", 1, results.size() );
@@ -137,7 +132,7 @@ public class ArrayBridgeTest extends SearchTestCase {
 					.getName() );
 		}
 		{
-			List<ArrayBridgeTestEntity> results = findResults( "nullIndexed", ITALIAN );
+			List<ArrayBridgeTestEntity> results = findResults( "nullIndexed", ITALIAN, false );
 
 			assertNotNull( "No result found for an indexed collection", results );
 			assertEquals( "Wrong number of results returned for an indexed collection", 1, results.size() );
@@ -145,16 +140,17 @@ public class ArrayBridgeTest extends SearchTestCase {
 					.getName() );
 		}
 		{
-			List<ArrayBridgeTestEntity> results = findResults( "nullIndexed", ENGLISH );
+			List<ArrayBridgeTestEntity> results = findResults( "nullIndexed", ENGLISH, false );
 
 			assertNotNull( "No result found for an indexed collection", results );
 			assertEquals( "Wrong number of results returned for an indexed collection", 2, results.size() );
 		}
 	}
 
+	@Test
 	public void testSearchEntryWhenNullEntryNotIndexed() throws Exception {
 		{
-			List<ArrayBridgeTestEntity> results = findResults( "nullNotIndexed", "DaltoValue" );
+			List<ArrayBridgeTestEntity> results = findResults( "nullNotIndexed", "DaltoValue", false );
 
 			assertNotNull( "No result found for an indexed array", results );
 			assertEquals( "Wrong number of results returned for an indexed array", 1, results.size() );
@@ -162,7 +158,7 @@ public class ArrayBridgeTest extends SearchTestCase {
 					.getName() );
 		}
 		{
-			List<ArrayBridgeTestEntity> results = findResults( "nullNotIndexed", "WorfValue" );
+			List<ArrayBridgeTestEntity> results = findResults( "nullNotIndexed", "WorfValue", false );
 
 			assertNotNull( "No result found for an indexed array", results );
 			assertEquals( "Wrong number of results returned for an indexed array", 1, results.size() );
@@ -171,6 +167,7 @@ public class ArrayBridgeTest extends SearchTestCase {
 		}
 	}
 
+	@Test
 	public void testSearchNotNullNumeric() throws Exception {
 		{
 			List<ArrayBridgeTestEntity> results = findNumericResults( "numericNullIndexed", 1 );
@@ -190,6 +187,7 @@ public class ArrayBridgeTest extends SearchTestCase {
 		}
 	}
 
+	@Test
 	public void testSearchNotNullNumericEntryWhenNullEntryNotIndexed() throws Exception {
 		{
 			List<ArrayBridgeTestEntity> results = findNumericResults( "numericNullNotIndexed", 3L );
@@ -209,33 +207,51 @@ public class ArrayBridgeTest extends SearchTestCase {
 		}
 	}
 
+	@Test
 	public void testDateIndexing() throws Exception {
-		{
-			List<ArrayBridgeTestEntity> results = findResults( "dates", indexedDate );
+		List<ArrayBridgeTestEntity> results = findResultsWithRangeQuery(
+				"dates",
+				DateTools.round( indexedDate, DateTools.Resolution.SECOND )
+		);
 
-			assertNotNull( "No result found for an indexed collection", results );
-			assertEquals( "Wrong number of results returned for an indexed collection", 1, results.size() );
-			assertEquals( "Wrong result returned from a collection of Date", withoutNull.getName(), results.get( 0 )
-					.getName() );
-		}
+		assertNotNull( "No result found for an indexed collection", results );
+		assertEquals( "Wrong number of results returned for an indexed collection", 1, results.size() );
+		assertEquals(
+				"Wrong result returned from a collection of Date", withoutNull.getName(), results.get( 0 )
+						.getName()
+		);
 	}
 
 	@SuppressWarnings("unchecked")
-	private List<ArrayBridgeTestEntity> findEmbeddedNullResults(String fieldName, Object value) {
+	private List<ArrayBridgeTestEntity> findEmbeddedNullResults(String fieldName, Object value, boolean checkNullToken) {
 		QueryBuilder queryBuilder = fullTextSession.getSearchFactory().buildQueryBuilder()
 				.forEntity( ArrayBridgeTestEntity.class ).get();
-		Query query = queryBuilder.keyword().onField( fieldName )
-				.ignoreAnalyzer()
-				.matching( value ).createQuery();
+		TermMatchingContext termMatchingContext = queryBuilder.keyword().onField( fieldName );
+		if ( checkNullToken ) {
+			termMatchingContext.ignoreFieldBridge();
+		}
+		Query query = termMatchingContext.ignoreAnalyzer().matching( value ).createQuery();
 		return fullTextSession.createFullTextQuery( query, ArrayBridgeTestEntity.class ).list();
 	}
 
 	@SuppressWarnings("unchecked")
-	private List<ArrayBridgeTestEntity> findResults(String fieldName, Object value) {
+	private List<ArrayBridgeTestEntity> findResults(String fieldName, Object value, boolean checkNullToken) {
 		QueryBuilder queryBuilder = fullTextSession.getSearchFactory().buildQueryBuilder()
 				.forEntity( ArrayBridgeTestEntity.class ).get();
-		Query query = queryBuilder.keyword().onField( fieldName )
-				.matching( value ).createQuery();
+		TermMatchingContext termMatchingContext = queryBuilder.keyword().onField( fieldName );
+		if ( checkNullToken ) {
+			termMatchingContext.ignoreFieldBridge();
+			termMatchingContext.ignoreAnalyzer();
+		}
+		Query query = termMatchingContext.matching( value ).createQuery();
+		return fullTextSession.createFullTextQuery( query, ArrayBridgeTestEntity.class ).list();
+	}
+
+	@SuppressWarnings("unchecked")
+	private List<ArrayBridgeTestEntity> findResultsWithRangeQuery(String fieldName, Object start) {
+		QueryBuilder queryBuilder = fullTextSession.getSearchFactory().buildQueryBuilder()
+				.forEntity( ArrayBridgeTestEntity.class ).get();
+		Query query = queryBuilder.range().onField( fieldName ).above( start ).createQuery();
 		return fullTextSession.createFullTextQuery( query, ArrayBridgeTestEntity.class ).list();
 	}
 
@@ -253,36 +269,7 @@ public class ArrayBridgeTest extends SearchTestCase {
 	}
 
 	@Override
-	protected Class<?>[] getAnnotatedClasses() {
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class<?>[] { ArrayBridgeTestEntity.class, };
-	}
-
-	private void cleanData() {
-		Transaction tx = fullTextSession.beginTransaction();
-		@SuppressWarnings("unchecked")
-		List<ArrayBridgeTestEntity> locations = fullTextSession.createCriteria( ArrayBridgeTestEntity.class ).list();
-		for ( ArrayBridgeTestEntity location : locations ) {
-			fullTextSession.delete( location );
-		}
-		tx.commit();
-		fullTextSession.close();
-	}
-
-	private boolean indexIsEmpty() {
-		int numDocsForeigner = countSizeForType( ArrayBridgeTestEntity.class );
-		return numDocsForeigner == 0;
-	}
-
-	private int countSizeForType(Class<?> type) {
-		SearchFactory searchFactory = fullTextSession.getSearchFactory();
-		int numDocs = -1; // to have it fail in case of errors
-		IndexReader locationIndexReader = searchFactory.getIndexReaderAccessor().open( type );
-		try {
-			numDocs = locationIndexReader.numDocs();
-		}
-		finally {
-			searchFactory.getIndexReaderAccessor().close( locationIndexReader );
-		}
-		return numDocs;
 	}
 }

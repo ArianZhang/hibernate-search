@@ -1,31 +1,17 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.indexes.serialization.spi;
 
 import java.util.List;
 import java.util.Map;
 
-import org.apache.lucene.document.Fieldable;
-
+import org.apache.lucene.index.IndexableField;
 import org.hibernate.search.backend.LuceneWork;
+import org.hibernate.search.backend.spi.DeletionQuery;
 
 /**
  * Contract between Hibernate Search and the Serialization mechanism.
@@ -33,13 +19,15 @@ import org.hibernate.search.backend.LuceneWork;
  *
  * LuceneWorkSerializer controls the LuceneWork traversal flow.
  *
- * @author Emmanuel Bernard <emmanuel@hibernate.org>
+ * @author Emmanuel Bernard
  */
 public interface Serializer {
 
 	void luceneWorks(List<LuceneWork> works);
 
 	void addOptimizeAll();
+
+	void addFlush();
 
 	void addPurgeAll(String entityClassName);
 
@@ -57,13 +45,15 @@ public interface Serializer {
 
 	void addDelete(String entityClassName);
 
+	void addDeleteByQuery(String entityClassName, DeletionQuery deletionQuery);
+
 	void addAdd(String entityClassName, Map<String, String> fieldToAnalyzerMap);
 
 	void addUpdate(String entityClassName, Map<String, String> fieldToAnalyzerMap);
 
 	byte[] serialize();
 
-	void fields(List<Fieldable> fields);
+	void fields(List<IndexableField> fields);
 
 	void addIntNumericField(int value, LuceneNumericFieldContext context);
 
@@ -83,5 +73,10 @@ public interface Serializer {
 
 	void addFieldWithSerializableFieldable(byte[] fieldable);
 
-	void addDocument(float boost);
+	void addDocValuesFieldWithBinaryValue(LuceneFieldContext luceneFieldContext);
+
+	void addDocValuesFieldWithNumericValue(long value, LuceneFieldContext luceneFieldContext);
+
+	void addDocument();
+
 }

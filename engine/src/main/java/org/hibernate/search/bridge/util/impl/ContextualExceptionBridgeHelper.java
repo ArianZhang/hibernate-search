@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.bridge.util.impl;
@@ -59,16 +42,19 @@ public final class ContextualExceptionBridgeHelper implements ConversionContext 
 	private final TwoWayConversionContextImpl twoWayAdapter = new TwoWayConversionContextImpl();
 	private final StringConversionContextImpl stringAdapter = new StringConversionContextImpl();
 
+	@Override
 	public ConversionContext setClass(Class<?> clazz) {
 		this.clazz = clazz;
 		return this;
 	}
 
+	@Override
 	public ConversionContext pushProperty(String property) {
 		path.add( property );
 		return this;
 	}
 
+	@Override
 	public ConversionContext popProperty() {
 		if ( path.size() == 0 ) {
 			throw new IllegalStateException( "Trying to pop a property from an empty conversion context" );
@@ -77,6 +63,7 @@ public final class ContextualExceptionBridgeHelper implements ConversionContext 
 		return this;
 	}
 
+	@Override
 	public ConversionContext pushIdentifierProperty() {
 		pushProperty( IDENTIFIER );
 		return this;
@@ -122,7 +109,7 @@ public final class ContextualExceptionBridgeHelper implements ConversionContext 
 			try {
 				oneWayBridge.set( name, value, document, luceneOptions );
 			}
-			catch ( RuntimeException e ) {
+			catch (RuntimeException e) {
 				throw buildBridgeException( e, "set" );
 			}
 		}
@@ -135,7 +122,7 @@ public final class ContextualExceptionBridgeHelper implements ConversionContext 
 			try {
 				return twoWayBridge.get( name, document );
 			}
-			catch ( RuntimeException e ) {
+			catch (RuntimeException e) {
 				throw buildBridgeException( e, "get" );
 			}
 		}
@@ -145,7 +132,7 @@ public final class ContextualExceptionBridgeHelper implements ConversionContext 
 			try {
 				return twoWayBridge.objectToString( object );
 			}
-			catch ( RuntimeException e ) {
+			catch (RuntimeException e) {
 				throw buildBridgeException( e, "objectToString" );
 			}
 		}
@@ -155,7 +142,7 @@ public final class ContextualExceptionBridgeHelper implements ConversionContext 
 			try {
 				twoWayBridge.set( name, value, document, luceneOptions );
 			}
-			catch ( RuntimeException e ) {
+			catch (RuntimeException e) {
 				throw buildBridgeException( e, "set" );
 			}
 		}
@@ -168,7 +155,7 @@ public final class ContextualExceptionBridgeHelper implements ConversionContext 
 			try {
 				return stringBridge.objectToString( object );
 			}
-			catch ( RuntimeException e ) {
+			catch (RuntimeException e) {
 				throw buildBridgeException( e, "objectToString" );
 			}
 		}

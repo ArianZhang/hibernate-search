@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2012, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.bridge.builtin;
 
@@ -31,7 +14,7 @@ import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.parser.ParseContext;
-import org.hibernate.search.SearchException;
+import org.hibernate.search.exception.SearchException;
 import org.hibernate.search.annotations.Store;
 import org.hibernate.search.bridge.LuceneOptions;
 import org.hibernate.search.bridge.TikaMetadataProcessor;
@@ -42,9 +25,9 @@ import org.hibernate.search.engine.metadata.impl.DocumentFieldMetadata;
 import org.junit.Before;
 import org.junit.Test;
 
-import static junit.framework.Assert.assertEquals;
-import static junit.framework.Assert.assertTrue;
-import static junit.framework.Assert.fail;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * @author Hardy Ferentschik
@@ -59,7 +42,7 @@ public class TikaBridgeTest {
 			File pdfFile = new File( TikaBridgeTest.class.getResource( TEST_DOCUMENT_PDF ).toURI() );
 			PATH_TO_TEST_DOCUMENT_PDF = pdfFile.getAbsolutePath();
 		}
-		catch ( URISyntaxException e ) {
+		catch (URISyntaxException e) {
 			throw new RuntimeException( "Unable to determine file path for test document" );
 		}
 	}
@@ -77,15 +60,10 @@ public class TikaBridgeTest {
 				new DocumentFieldMetadata.Builder( null, Store.YES, Field.Index.ANALYZED, Field.TermVector.NO )
 						.boost( 0F )
 						.build();
-		options = new LuceneOptionsImpl( fieldMetadata );
+		options = new LuceneOptionsImpl( fieldMetadata, 1f, 1f );
 
 		CustomTikaMetadataProcessor.invocationCount = 0;
 		CustomTikaParseContextProvider.invocationCount = 0;
-	}
-
-	@Test(expected = IllegalArgumentException.class)
-	public void testNullDataThrowsException() {
-		bridgeUnderTest.set( testFieldName, null, testDocument, options );
 	}
 
 	@Test
@@ -105,7 +83,7 @@ public class TikaBridgeTest {
 			bridgeUnderTest.setMetadataProcessorClass( this.getClass() );
 			fail();
 		}
-		catch ( SearchException e ) {
+		catch (SearchException e) {
 			assertEquals(
 					"Wrong error message",
 					"Wrong configuration of Tika parse context provider: class org.hibernate.search.test.bridge.builtin.TikaBridgeTest does not implement interface org.hibernate.search.bridge.TikaMetadataProcessor",
@@ -143,7 +121,7 @@ public class TikaBridgeTest {
 			bridgeUnderTest.setParseContextProviderClass( this.getClass() );
 			fail();
 		}
-		catch ( SearchException e ) {
+		catch (SearchException e) {
 			assertEquals(
 					"Wrong error message",
 					"Wrong configuration of Tika metadata processor: class org.hibernate.search.test.bridge.builtin.TikaBridgeTest does not implement interface org.hibernate.search.bridge.TikaParseContextProvider",
@@ -170,7 +148,7 @@ public class TikaBridgeTest {
 		try {
 			bridgeUnderTest.set( testFieldName, "/foo", testDocument, options );
 		}
-		catch ( SearchException e ) {
+		catch (SearchException e) {
 			assertTrue( "Wrong error type", e.getMessage().startsWith( "HSEARCH000152" ) );
 		}
 	}

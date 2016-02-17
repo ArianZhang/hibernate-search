@@ -1,24 +1,13 @@
 /*
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
+ * Hibernate Search, full-text search for your domain model
  *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.bridge;
 
 import java.util.Date;
+
 import javax.persistence.CollectionTable;
 import javax.persistence.Column;
 import javax.persistence.ElementCollection;
@@ -34,7 +23,6 @@ import org.hibernate.search.annotations.DateBridge;
 import org.hibernate.search.annotations.Field;
 import org.hibernate.search.annotations.Indexed;
 import org.hibernate.search.annotations.IndexedEmbedded;
-import org.hibernate.search.annotations.NumericField;
 import org.hibernate.search.annotations.Resolution;
 import org.hibernate.search.annotations.Store;
 
@@ -47,9 +35,10 @@ import org.hibernate.search.annotations.Store;
 public class ArrayBridgeTestEntity {
 
 	static final String NULL_TOKEN = "NULL_MARKER";
-	static final String NULL_NUMERIC_TOKEN = "NULL_NUMERIC_MARKER";
+	static final String NULL_NUMERIC_TOKEN = "-1";
 	static final String NULL_EMBEDDED = "EMBEDDED_NULL";
-	static final String NULL_EMBEDDED_NUMERIC = "EMBEDDED_NUMERIC_NULL";
+
+	static final String NULL_EMBEDDED_NUMERIC = "-1";
 
 	private Long id;
 	private String name;
@@ -85,7 +74,7 @@ public class ArrayBridgeTestEntity {
 		this.name = name;
 	}
 
-	@Field(indexNullAs = NULL_TOKEN)
+	@Field(indexNullAs = NULL_TOKEN, analyze = Analyze.NO)
 	@ElementCollection
 	@IndexedEmbedded(indexNullAs = NULL_EMBEDDED)
 	@OrderColumn
@@ -99,8 +88,7 @@ public class ArrayBridgeTestEntity {
 		this.nullIndexed = nullIndexed;
 	}
 
-	@Field(store = Store.YES, indexNullAs = NULL_NUMERIC_TOKEN)
-	@NumericField
+	@Field(store = Store.YES, indexNullAs = NULL_NUMERIC_TOKEN, analyze = Analyze.NO)
 	@ElementCollection
 	@IndexedEmbedded(prefix = "embeddedNum", indexNullAs = NULL_EMBEDDED_NUMERIC)
 	@OrderColumn
@@ -131,7 +119,6 @@ public class ArrayBridgeTestEntity {
 	@Field(store = Store.YES)
 	@ElementCollection
 	@IndexedEmbedded
-	@NumericField
 	@OrderColumn
 	@CollectionTable(name = "NumericNullNotIndexed", joinColumns = @JoinColumn(name = "array_id"))
 	@Column(name = "numericNullNotIndexed")

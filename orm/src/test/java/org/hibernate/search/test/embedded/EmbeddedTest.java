@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.embedded;
 
@@ -27,25 +10,30 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.lucene.index.Term;
-import org.apache.lucene.queryParser.MultiFieldQueryParser;
-import org.apache.lucene.queryParser.ParseException;
-import org.apache.lucene.queryParser.QueryParser;
+import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
+import org.apache.lucene.queryparser.classic.ParseException;
+import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 
 import org.hibernate.Session;
 import org.hibernate.Transaction;
+
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.test.SearchTestCase;
-import org.hibernate.search.test.TestConstants;
+import org.hibernate.search.test.SearchTestBase;
+import org.hibernate.search.testsupport.TestConstants;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
 
 /**
  * @author Emmanuel Bernard
  * @author Hardy Ferentschik
  */
-public class EmbeddedTest extends SearchTestCase {
+public class EmbeddedTest extends SearchTestBase {
 
+	@Test
 	public void testEmbeddedIndexing() throws Exception {
 		Tower tower = new Tower();
 		tower.setName( "JBoss tower" );
@@ -67,7 +55,7 @@ public class EmbeddedTest extends SearchTestCase {
 		tx.commit();
 
 		FullTextSession session = Search.getFullTextSession( s );
-		QueryParser parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "id", TestConstants.standardAnalyzer );
+		QueryParser parser = new QueryParser( "id", TestConstants.standardAnalyzer );
 		Query query;
 		List<?> result;
 
@@ -112,6 +100,7 @@ public class EmbeddedTest extends SearchTestCase {
 
 	}
 
+	@Test
 	public void testEmbeddedIndexingOneToMany() throws Exception {
 		Country country = new Country();
 		country.setName( "Germany" );
@@ -133,7 +122,7 @@ public class EmbeddedTest extends SearchTestCase {
 		tx.commit();
 
 		FullTextSession session = Search.getFullTextSession( s );
-		QueryParser parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "id", TestConstants.standardAnalyzer );
+		QueryParser parser = new QueryParser( "id", TestConstants.standardAnalyzer );
 		Query query;
 		List<?> result;
 
@@ -143,6 +132,7 @@ public class EmbeddedTest extends SearchTestCase {
 		s.close();
 	}
 
+	@Test
 	public void testContainedIn() throws Exception {
 		Tower tower = new Tower();
 		tower.setName( "JBoss tower" );
@@ -170,7 +160,7 @@ public class EmbeddedTest extends SearchTestCase {
 		s.clear();
 
 		FullTextSession session = Search.getFullTextSession( s );
-		QueryParser parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "id", TestConstants.standardAnalyzer );
+		QueryParser parser = new QueryParser( "id", TestConstants.standardAnalyzer );
 		Query query;
 		List<?> result;
 
@@ -203,6 +193,7 @@ public class EmbeddedTest extends SearchTestCase {
 
 	}
 
+	@Test
 	public void testIndexedEmbeddedAndCollections() throws Exception {
 		Author a = new Author();
 		a.setName( "Voltaire" );
@@ -248,7 +239,6 @@ public class EmbeddedTest extends SearchTestCase {
 		tx = session.beginTransaction();
 
 		QueryParser parser = new MultiFieldQueryParser(
-				TestConstants.getTargetLuceneVersion(),
 				new String[] { "name", "authors.name" },
 				TestConstants.standardAnalyzer
 		);
@@ -293,6 +283,7 @@ public class EmbeddedTest extends SearchTestCase {
 	 *
 	 * @throws Exception in case the test fails
 	 */
+	@Test
 	public void testEmbeddedObjectUpdate() throws Exception {
 
 		State state = new State();
@@ -312,7 +303,6 @@ public class EmbeddedTest extends SearchTestCase {
 		tx = session.beginTransaction();
 
 		QueryParser parser = new MultiFieldQueryParser(
-				TestConstants.getTargetLuceneVersion(),
 				new String[] { "name", "state.name" },
 				TestConstants.standardAnalyzer
 		);
@@ -341,6 +331,7 @@ public class EmbeddedTest extends SearchTestCase {
 		s.close();
 	}
 
+	@Test
 	public void testEmbeddedToManyInSuperclass() throws ParseException {
 		ProductFeature featureA = new ProductFeature();
 		featureA.setName( "featureA" );
@@ -362,7 +353,7 @@ public class EmbeddedTest extends SearchTestCase {
 		FullTextSession session = Search.getFullTextSession( s );
 		tx = session.beginTransaction();
 
-		QueryParser parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "name", TestConstants.standardAnalyzer );
+		QueryParser parser = new QueryParser( "name", TestConstants.standardAnalyzer );
 		Query query;
 		List<?> result;
 
@@ -381,18 +372,17 @@ public class EmbeddedTest extends SearchTestCase {
 		tx.commit();
 		s.clear();
 
+		tx = s.beginTransaction();
 		query = parser.parse( "features.name:featureB" );
 		result = session.createFullTextQuery( query, AbstractProduct.class ).list();
 		assertEquals( "Feature B should be indexed now as well", 1, result.size() );
+		tx.commit();
 
 		s.close();
 	}
 
-	protected void configure(org.hibernate.cfg.Configuration cfg) {
-		super.configure( cfg );
-	}
-
-	protected Class<?>[] getAnnotatedClasses() {
+	@Override
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] {
 				Tower.class, Address.class, Product.class, Order.class, Author.class, Country.class,
 				State.class, StateCandidate.class, NonIndexedEntity.class,

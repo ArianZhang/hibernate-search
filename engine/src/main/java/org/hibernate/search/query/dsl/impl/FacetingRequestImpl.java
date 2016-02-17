@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2011, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.query.dsl.impl;
@@ -52,7 +35,7 @@ public abstract class FacetingRequestImpl implements FacetingRequest {
 	/**
 	 * Whether a facet value with 0 occurrences
 	 */
-	private boolean includeZeroCounts = true;
+	private boolean includeZeroCounts = false;
 
 	/**
 	 * The maximum number of {@link org.hibernate.search.query.facet.Facet}s to return for this request. A negative value means that all
@@ -71,10 +54,12 @@ public abstract class FacetingRequestImpl implements FacetingRequest {
 		this.fieldName = fieldName;
 	}
 
+	@Override
 	public String getFacetingName() {
 		return name;
 	}
 
+	@Override
 	public String getFieldName() {
 		return fieldName;
 	}
@@ -83,10 +68,12 @@ public abstract class FacetingRequestImpl implements FacetingRequest {
 		this.sort = sort;
 	}
 
+	@Override
 	public FacetSortOrder getSort() {
 		return sort;
 	}
 
+	@Override
 	public int getMaxNumberOfFacets() {
 		return maxNumberOfFacets;
 	}
@@ -95,10 +82,14 @@ public abstract class FacetingRequestImpl implements FacetingRequest {
 		this.maxNumberOfFacets = maxNumberOfFacets;
 	}
 
-	public abstract Class<?> getFieldCacheType();
+	/**
+	 * @return the field value type on which the facets applies. This determines which type of facet query one needs to build.
+	 */
+	public abstract Class<?> getFacetValueType();
 
 	public abstract Facet createFacet(String value, int count);
 
+	@Override
 	public boolean hasZeroCountsIncluded() {
 		return includeZeroCounts;
 	}

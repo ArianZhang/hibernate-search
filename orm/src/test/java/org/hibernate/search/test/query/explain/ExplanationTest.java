@@ -1,45 +1,34 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.query.explain;
 
-import java.util.Map;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
-import org.hibernate.search.test.SearchTestCase;
-import org.hibernate.search.test.TestConstants;
+import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
+import org.apache.lucene.search.Query;
+
+import org.hibernate.Transaction;
+
+import org.hibernate.search.FullTextQuery;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.FullTextQuery;
-import org.hibernate.Transaction;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.queryParser.MultiFieldQueryParser;
+import org.hibernate.search.test.SearchTestBase;
+import org.hibernate.search.testsupport.TestConstants;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
 
 /**
  * @author Emmanuel Bernard
  */
-public class ExplanationTest extends SearchTestCase {
+public class ExplanationTest extends SearchTestBase {
+	@Test
 	public void testExplanation() throws Exception {
 		FullTextSession s = Search.getFullTextSession( openSession() );
 		Transaction tx = s.beginTransaction();
@@ -54,14 +43,14 @@ public class ExplanationTest extends SearchTestCase {
 		Map<String, Float> boosts = new HashMap<String, Float>(2);
 		boosts.put( "title", new Float(4) );
 		boosts.put( "description", new Float(1) );
-		MultiFieldQueryParser parser = new MultiFieldQueryParser( TestConstants.getTargetLuceneVersion(), new String[] {"title", "description"},
+		MultiFieldQueryParser parser = new MultiFieldQueryParser( new String[] {"title", "description"},
 				TestConstants.standardAnalyzer, boosts );
 		Query luceneQuery = parser.parse( "dark" );
 		FullTextQuery ftQuery = s.createFullTextQuery( luceneQuery, Dvd.class )
 				.setProjection( FullTextQuery.DOCUMENT_ID, FullTextQuery.EXPLANATION, FullTextQuery.THIS );
 		@SuppressWarnings("unchecked") List<Object[]> results = ftQuery.list();
 		assertEquals( 2, results.size() );
-		for (Object[] result : results) {
+		for ( Object[] result : results ) {
 			assertEquals( ftQuery.explain( (Integer) result[0] ).toString(), result[1].toString() );
 			s.delete( result[2] );
 		}
@@ -69,7 +58,8 @@ public class ExplanationTest extends SearchTestCase {
 		s.close();
 
 	}
-	protected Class<?>[] getAnnotatedClasses() {
+	@Override
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] {
 				Dvd.class
 		};

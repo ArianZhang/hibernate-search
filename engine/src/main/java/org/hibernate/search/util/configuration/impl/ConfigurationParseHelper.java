@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010-2011, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.util.configuration.impl;
 
@@ -27,20 +10,29 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Properties;
 
-import org.hibernate.annotations.common.util.StringHelper;
-import org.hibernate.search.SearchException;
+import org.hibernate.search.util.StringHelper;
+import org.hibernate.search.exception.SearchException;
+import org.hibernate.search.util.logging.impl.Log;
+import org.hibernate.search.util.logging.impl.LoggerFactory;
 
 /**
  * Helper class:
- * - to avoid managing NumberFormatException and similar code
- * - ensure consistent error messages across Configuration parsing problems
- * - locate resources
+ * <ul>
+ * <li>to avoid managing {@code NumberFormatException}s and similar</li>
+ * <li>to ensure consistent error messages across configuration parsing</li>
+ * <li>to locate resources</li>
+ * </ul>
  *
  * @author Sanne Grinovero
  * @author Steve Ebersole
- * @author Emmanuel Bernard <emmanuel@hibernate.org>
+ * @author Emmanuel Bernard
+ * @author Hardy Ferentschik
  */
-public abstract class ConfigurationParseHelper {
+public class ConfigurationParseHelper {
+	private static final Log log = LoggerFactory.make();
+
+	private ConfigurationParseHelper() {
+	}
 
 	/**
 	 * Try to locate a local URL representing the incoming path. The first attempt
@@ -55,7 +47,7 @@ public abstract class ConfigurationParseHelper {
 		try {
 			return new URL( path );
 		}
-		catch ( MalformedURLException e ) {
+		catch (MalformedURLException e) {
 			return findAsResource( path );
 		}
 	}
@@ -95,14 +87,16 @@ public abstract class ConfigurationParseHelper {
 	}
 
 	/**
-	 * Parses a String to get an int value.
+	 * Parses a string into an integer value.
 	 *
-	 * @param value A string containing an int value to parse
-	 * @param errorMsgOnParseFailure message being wrapped in a SearchException if value is null or not correct.
-	 * @return the parsed value
+	 * @param value a string containing an int value to parse
+	 * @param errorMsgOnParseFailure message being wrapped in a SearchException if value is {@code null} or not an integer
+	 *
+	 * @return the parsed integer value
+	 *
 	 * @throws SearchException both for null values and for Strings not containing a valid int.
 	 */
-	public static final int parseInt(String value, String errorMsgOnParseFailure) {
+	public static int parseInt(String value, String errorMsgOnParseFailure) {
 		if ( value == null ) {
 			throw new SearchException( errorMsgOnParseFailure );
 		}
@@ -111,7 +105,7 @@ public abstract class ConfigurationParseHelper {
 				return Integer.parseInt( value.trim() );
 			}
 			catch (NumberFormatException nfe) {
-				throw new SearchException( errorMsgOnParseFailure, nfe );
+				throw log.getInvalidIntegerValueException( errorMsgOnParseFailure, nfe );
 			}
 		}
 	}
@@ -124,7 +118,7 @@ public abstract class ConfigurationParseHelper {
 	 * @return the parsed value
 	 * @throws SearchException both for null values and for Strings not containing a valid int.
 	 */
-	public static final long parseLong(String value, String errorMsgOnParseFailure) {
+	public static long parseLong(String value, String errorMsgOnParseFailure) {
 		if ( value == null ) {
 			throw new SearchException( errorMsgOnParseFailure );
 		}
@@ -139,10 +133,11 @@ public abstract class ConfigurationParseHelper {
 	}
 
 	/**
-	 * In case value is null or an empty string the defValue is returned
-	 * @param value
-	 * @param defValue
-	 * @param errorMsgOnParseFailure
+	 * In case value is null or an empty string the defValue is returned.
+	 *
+	 * @param value the text to parse
+	 * @param defValue the value to return in case the text is null
+ 	 * @param errorMsgOnParseFailure message in case of error
 	 * @return the converted int.
 	 * @throws SearchException if value can't be parsed.
 	 */
@@ -157,9 +152,9 @@ public abstract class ConfigurationParseHelper {
 
 	/**
 	 * In case value is null or an empty string the defValue is returned
-	 * @param value
-	 * @param defValue
-	 * @param errorMsgOnParseFailure
+	 * @param value the text to parse
+	 * @param defValue the value to return in case the text is null
+ 	 * @param errorMsgOnParseFailure message in case of error
 	 * @return the converted long.
 	 * @throws SearchException if value can't be parsed.
 	 */
@@ -177,9 +172,9 @@ public abstract class ConfigurationParseHelper {
 	 * defValue if not found or if an empty string is found.
 	 * When the key the value is found but not in valid format
 	 * a standard error message is generated.
-	 * @param cfg
-	 * @param key
-	 * @param defValue
+	 * @param cfg the properties
+	 * @param key the property identifier
+	 * @param defValue the value to return if the property is not found or empty
 	 * @return the converted int.
 	 * @throws SearchException for invalid format.
 	 */
@@ -193,9 +188,9 @@ public abstract class ConfigurationParseHelper {
 	 * defValue if not found or if an empty string is found.
 	 * When the key the value is found but not in valid format
 	 * a standard error message is generated.
-	 * @param cfg
-	 * @param key
-	 * @param defValue
+	 * @param cfg the properties
+	 * @param key the property identifier
+	 * @param defaultValue the value to return if the property is not found or empty
 	 * @return the converted long value.
 	 * @throws SearchException for invalid format.
 	 */
@@ -249,10 +244,40 @@ public abstract class ConfigurationParseHelper {
 
 	/**
 	 * Get the string property or defaults if not present
+	 * @param cfg configuration Properties
+	 * @param key the property key
+	 * @param defaultValue the value to return if the property value is null
+	 * @return the String or default value
 	 */
 	public static final String getString(Properties cfg, String key, String defaultValue) {
+		if ( cfg == null ) {
+			return defaultValue;
+		}
+		else {
+			String propValue = cfg.getProperty( key );
+			return propValue == null ? defaultValue : propValue;
+		}
+	}
+
+	/**
+	 * Retrieves a configuration property and parses it as an Integer if it exists,
+	 * or returns null if the property is not set (undefined).
+	 * @param cfg configuration Properties
+	 * @param key the property key
+	 * @return the Integer or null
+	 * @throws SearchException both for empty (non-null) values and for Strings not containing a valid int representation.
+	 */
+	public static Integer getIntValue(Properties cfg, String key) {
 		String propValue = cfg.getProperty( key );
-		return propValue == null ? defaultValue : propValue;
+		if ( propValue == null ) {
+			return null;
+		}
+		if ( StringHelper.isEmpty( propValue.trim() ) ) {
+			throw log.configurationPropertyCantBeEmpty( key );
+		}
+		else {
+			return parseInt( propValue, 0, "Unable to parse " + key + ": " + propValue );
+		}
 	}
 
 }

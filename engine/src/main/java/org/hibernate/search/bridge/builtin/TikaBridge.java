@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2012, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.bridge.builtin;
 
@@ -39,7 +22,6 @@ import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.parser.ParseContext;
 import org.apache.tika.parser.Parser;
 import org.apache.tika.sax.WriteOutContentHandler;
-
 import org.hibernate.search.bridge.FieldBridge;
 import org.hibernate.search.bridge.LuceneOptions;
 import org.hibernate.search.bridge.TikaMetadataProcessor;
@@ -57,6 +39,9 @@ import static org.apache.tika.io.IOUtils.closeQuietly;
  */
 public class TikaBridge implements FieldBridge {
 	private static final Log log = LoggerFactory.make();
+
+	// Expensive, so only do it once. The Parser is threadsafe.
+	private final Parser parser = new AutoDetectParser();
 
 	private TikaMetadataProcessor metadataProcessor;
 	private TikaParseContextProvider parseContextProvider;
@@ -94,25 +79,43 @@ public class TikaBridge implements FieldBridge {
 
 	@Override
 	public void set(String name, Object value, Document document, LuceneOptions luceneOptions) {
-		if ( value == null ) {
-			throw new IllegalArgumentException( "null cannot be passed to Tika bridge" );
+		final Metadata metadata;
+		final String fieldValue;
+
+		if ( value != null ) {
+			metadata = metadataProcessor.prepareMetadata();
+			fieldValue = getFieldValue( name, value, metadata );
 		}
+		else if ( luceneOptions.indexNullAs() != null ) {
+			metadata = metadataProcessor.prepareMetadata();
+			fieldValue = luceneOptions.indexNullAs();
+		}
+		else {
+			return;
+		}
+
+		luceneOptions.addFieldToDocument( name, fieldValue, document );
+
+		// allow for optional indexing of metadata by the user
+		metadataProcessor.set( name, value, document, luceneOptions, metadata );
+	}
+
+	/**
+	 * Opens an input stream for the given blob, byte array, file or URI and returns its contents.
+	 */
+	private String getFieldValue(String name, Object value, Metadata metadata) {
 		InputStream in = getInputStreamForData( value );
 		try {
-			Metadata metadata = metadataProcessor.prepareMetadata();
 			ParseContext parseContext = parseContextProvider.getParseContext( name, value );
 
 			StringWriter writer = new StringWriter();
 			WriteOutContentHandler contentHandler = new WriteOutContentHandler( writer );
 
-			Parser parser = new AutoDetectParser();
 			parser.parse( in, contentHandler, metadata, parseContext );
-			luceneOptions.addFieldToDocument( name, writer.toString(), document );
 
-			// allow for optional indexing of metadata by the user
-			metadataProcessor.set( name, value, document, luceneOptions, metadata );
+			return writer.toString();
 		}
-		catch ( Exception e ) {
+		catch (Exception e) {
 			throw log.unableToParseDocument( e );
 		}
 		finally {
@@ -125,7 +128,7 @@ public class TikaBridge implements FieldBridge {
 			try {
 				return ( (Blob) object ).getBinaryStream();
 			}
-			catch ( SQLException e ) {
+			catch (SQLException e) {
 				throw log.unableToGetInputStreamFromBlob( e );
 			}
 		}
@@ -144,7 +147,7 @@ public class TikaBridge implements FieldBridge {
 			return openInputStream( file );
 		}
 		else {
-			throw log.unsupportedTikaBridgeType();
+			throw log.unsupportedTikaBridgeType( object != null ? object.getClass() : null );
 		}
 	}
 
@@ -163,7 +166,7 @@ public class TikaBridge implements FieldBridge {
 		try {
 			return new FileInputStream( file );
 		}
-		catch ( FileNotFoundException e ) {
+		catch (FileNotFoundException e) {
 			throw log.fileDoesNotExist( file.toString() );
 		}
 	}

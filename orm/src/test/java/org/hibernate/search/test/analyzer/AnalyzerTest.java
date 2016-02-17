@@ -1,63 +1,45 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.analyzer;
 
 import java.util.HashSet;
 import java.util.Set;
 
-import junit.framework.Assert;
-
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.Token;
-import org.apache.lucene.queryParser.QueryParser;
-
+import org.apache.lucene.queryparser.classic.QueryParser;
 import org.hibernate.Transaction;
-import org.hibernate.annotations.common.reflection.ReflectionManager;
-import org.hibernate.annotations.common.reflection.XClass;
 import org.hibernate.search.FullTextQuery;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
 import org.hibernate.search.SearchFactory;
-import org.hibernate.search.SearchException;
-import org.hibernate.search.cfg.impl.SearchConfigurationFromHibernateCore;
-import org.hibernate.search.engine.impl.HibernateStatelessInitializer;
-import org.hibernate.search.engine.spi.DocumentBuilderContainedEntity;
-import org.hibernate.search.impl.ConfigContext;
-import org.hibernate.search.test.SearchTestCase;
-import org.hibernate.search.test.TestConstants;
+import org.hibernate.search.exception.SearchException;
+import org.hibernate.search.test.SearchTestBase;
+import org.hibernate.search.test.util.FullTextSessionBuilder;
+import org.hibernate.search.testsupport.TestConstants;
 import org.hibernate.search.util.AnalyzerUtils;
 import org.hibernate.search.util.logging.impl.Log;
 import org.hibernate.search.util.logging.impl.LoggerFactory;
+import org.junit.Assert;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * @author Emmanuel Bernard
  * @author Hardy Ferentschik
  */
-public class AnalyzerTest extends SearchTestCase {
+public class AnalyzerTest extends SearchTestBase {
 
 	public static final Log log = LoggerFactory.make();
 
+	@Test
 	public void testAnalyzerDiscriminator() throws Exception {
 		Article germanArticle = new Article();
 		germanArticle.setLanguage( "de" );
@@ -79,12 +61,12 @@ public class AnalyzerTest extends SearchTestCase {
 
 		// at query time we use a standard analyzer. We explicitly search for tokens which can only be found if the
 		// right language specific stemmer was used at index time
-		QueryParser parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "references.text", TestConstants.standardAnalyzer );
+		QueryParser parser = new QueryParser( "references.text", TestConstants.standardAnalyzer );
 		org.apache.lucene.search.Query luceneQuery = parser.parse( "aufeinanderschlug" );
 		FullTextQuery query = s.createFullTextQuery( luceneQuery );
 		assertEquals( 1, query.getResultSize() );
 
-		parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "text", TestConstants.standardAnalyzer );
+		parser = new QueryParser( "text", TestConstants.standardAnalyzer );
 		luceneQuery = parser.parse( "acknowledg" );
 		query = s.createFullTextQuery( luceneQuery );
 		assertEquals( 1, query.getResultSize() );
@@ -93,22 +75,23 @@ public class AnalyzerTest extends SearchTestCase {
 		s.close();
 	}
 
+	@Test
 	public void testMultipleAnalyzerDiscriminatorDefinitions() {
-		SearchConfigurationFromHibernateCore searchConfig = new SearchConfigurationFromHibernateCore( cfg );
-		ReflectionManager reflectionManager = searchConfig.getReflectionManager();
-		XClass xclass = reflectionManager.toXClass( BlogEntry.class );
-		Set<XClass> optimizationBlackList = new HashSet<XClass>();
-		ConfigContext context = new ConfigContext( searchConfig );
+		FullTextSessionBuilder builder = new FullTextSessionBuilder();
+		builder.addAnnotatedClass( BlogEntry.class );
 		try {
-			new DocumentBuilderContainedEntity( xclass, context, reflectionManager,
-					optimizationBlackList, HibernateStatelessInitializer.INSTANCE );
+			builder.build();
 			fail();
 		}
-		catch ( SearchException e ) {
-			assertTrue( "Wrong error message", e.getMessage().startsWith( "Multiple AnalyzerDiscriminator defined in the same class hierarchy" ));
+		catch (SearchException e) {
+			assertTrue(
+					"Wrong error message",
+					e.getMessage().startsWith( "Multiple AnalyzerDiscriminator defined in the same class hierarchy" )
+			);
 		}
 	}
 
+	@Test
 	public void testScopedAnalyzers() throws Exception {
 		MyEntity en = new MyEntity();
 		en.setEntity( "Entity" );
@@ -122,7 +105,7 @@ public class AnalyzerTest extends SearchTestCase {
 		tx.commit();
 
 		tx = s.beginTransaction();
-		QueryParser parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "id", TestConstants.standardAnalyzer );
+		QueryParser parser = new QueryParser( "id", TestConstants.standardAnalyzer );
 		org.apache.lucene.search.Query luceneQuery = parser.parse( "entity:alarm" );
 		FullTextQuery query = s.createFullTextQuery( luceneQuery, MyEntity.class );
 		assertEquals( 1, query.getResultSize() );
@@ -145,6 +128,7 @@ public class AnalyzerTest extends SearchTestCase {
 		s.close();
 	}
 
+	@Test
 	public void testScopedAnalyzersFromSearchFactory() throws Exception {
 		FullTextSession session = Search.getFullTextSession( openSession() );
 		SearchFactory searchFactory = session.getSearchFactory();
@@ -169,20 +153,21 @@ public class AnalyzerTest extends SearchTestCase {
 		try {
 			searchFactory.getAnalyzer( (Class) null );
 		}
-		catch ( IllegalArgumentException iae ) {
+		catch (IllegalArgumentException iae) {
 			log.debug( "success" );
 		}
 
 		try {
 			searchFactory.getAnalyzer( String.class );
 		}
-		catch ( IllegalArgumentException iae ) {
+		catch (IllegalArgumentException iae) {
 			log.debug( "success" );
 		}
 
 		session.close();
 	}
 
+	@Test
 	public void testNotAnalyzedFieldAndScopedAnalyzer() throws Exception {
 		FullTextSession session = Search.getFullTextSession( openSession() );
 		SearchFactory searchFactory = session.getSearchFactory();
@@ -205,7 +190,8 @@ public class AnalyzerTest extends SearchTestCase {
 		}
 	}
 
-	protected Class<?>[] getAnnotatedClasses() {
+	@Override
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] { MyEntity.class, Article.class };
 	}
 }

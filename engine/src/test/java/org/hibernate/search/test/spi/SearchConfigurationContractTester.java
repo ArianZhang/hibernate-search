@@ -1,22 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2012 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.spi;
 
@@ -28,10 +14,11 @@ import org.hibernate.annotations.common.reflection.ReflectionManager;
 import org.hibernate.search.cfg.SearchMapping;
 import org.hibernate.search.cfg.spi.SearchConfiguration;
 import org.hibernate.search.cfg.spi.SearchConfigurationBase;
-import org.hibernate.search.spi.ServiceProvider;
+import org.hibernate.search.engine.service.classloading.spi.ClassLoaderService;
+import org.hibernate.search.engine.service.spi.Service;
 
 /**
- * IFF this class compiles we're good. The idea is that implementors
+ * If this class compiles we're good. The idea is that implementors
  * of the SearchConfiguration SPI are all currently aware of the
  * methods listed here today. If we add new methods to the SPI,
  * we need to make sure we add appropriate default implementations
@@ -41,9 +28,9 @@ import org.hibernate.search.spi.ServiceProvider;
  * after updates in the SearchConfiguration, be careful.
  *
  * The current list of methods are SPI compatible with Hibernate
- * Search version 4.1.0.
+ * Search version 5.0.0.
  *
- * @author Sanne Grinovero <sanne@hibernate.org> (C) 2012 Red Hat Inc.
+ * @author Sanne Grinovero (C) 2012 Red Hat Inc.
  */
 public class SearchConfigurationContractTester extends SearchConfigurationBase implements SearchConfiguration {
 
@@ -80,7 +67,12 @@ public class SearchConfigurationContractTester extends SearchConfigurationBase i
 	}
 
 	@Override
-	public Map<Class<? extends ServiceProvider<?>>, Object> getProvidedServices() {
+	public Map<Class<? extends Service>, Object> getProvidedServices() {
+		return null;
+	}
+
+	@Override
+	public ClassLoaderService getClassLoaderService() {
 		return null;
 	}
 

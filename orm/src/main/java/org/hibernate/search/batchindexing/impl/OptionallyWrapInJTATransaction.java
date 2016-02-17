@@ -1,174 +1,85 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2012 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.batchindexing.impl;
 
-import javax.transaction.Status;
 import javax.transaction.SystemException;
-import javax.transaction.TransactionManager;
 
-import org.hibernate.search.exception.ErrorHandler;
-import org.hibernate.search.util.logging.impl.Log;
-
-import org.hibernate.SessionFactory;
 import org.hibernate.StatelessSession;
-import org.hibernate.Session;
-import org.hibernate.engine.spi.SessionFactoryImplementor;
+import org.hibernate.search.util.logging.impl.Log;
 import org.hibernate.search.util.logging.impl.LoggerFactory;
-import org.hibernate.engine.transaction.spi.TransactionFactory;
-import org.hibernate.service.jta.platform.spi.JtaPlatform;
 
 /**
- * Wrap the subsequent Runnable in a JTA Transaction if necessary:
- *  - if the existing Hibernate Core transaction strategy requires a TransactionManager
- *  - if no JTA transaction is already started
+ * Wraps the execution of a {@code Runnable} in a JTA Transaction if necessary:
+ * <ul>
+ * <li>if the existing Hibernate Core transaction strategy requires a TransactionManager</li>
+ * <li>if no JTA transaction is already started</li>
+ * </ul>
  *
- * Unfortunately at this time we need to have access to SessionFactoryImplementor
+ * Unfortunately at this time we need to have access to {@code SessionFactoryImplementor}.
  *
  * @author Emmanuel Bernard
  */
-public class OptionallyWrapInJTATransaction implements Runnable {
+public class OptionallyWrapInJTATransaction extends ErrorHandledRunnable {
 
 	private static final Log log = LoggerFactory.make();
 
-	private final SessionFactoryImplementor factory;
-	private final SessionAwareRunnable sessionAwareRunnable;
 	private final StatelessSessionAwareRunnable statelessSessionAwareRunnable;
-	private final ErrorHandler errorHandler;
+	private final BatchTransactionalContext batchContext;
+	private final Integer transactionTimeout;
+	private final boolean wrapInTransaction;
+	private final String tenantId;
 
-	public OptionallyWrapInJTATransaction(SessionFactory factory, ErrorHandler errorHandler, SessionAwareRunnable sessionAwareRunnable) {
+	public OptionallyWrapInJTATransaction(BatchTransactionalContext batchContext, StatelessSessionAwareRunnable statelessSessionAwareRunnable, Integer transactionTimeout, String tenantId) {
+		super( batchContext.extendedIntegrator );
 		/*
 		 * Unfortunately we need to access SessionFactoryImplementor to detect:
 		 *  - whether or not we need to start the JTA transaction
 		 *  - start it
 		 */
-		//TODO get SessionFactoryImplementor it from the SearchFactory as we might get a hold of the SFI at startup time
-		// if that's the case, SearchFactory should expose something like T unwrap(Class<T> clazz);
-		this.factory = (SessionFactoryImplementor) factory;
-		this.sessionAwareRunnable = sessionAwareRunnable;
-		this.statelessSessionAwareRunnable = null;
-		this.errorHandler = errorHandler;
-	}
-
-	public OptionallyWrapInJTATransaction(SessionFactory factory, ErrorHandler errorHandler, StatelessSessionAwareRunnable statelessSessionAwareRunnable) {
-		/*
-		 * Unfortunately we need to access SessionFactoryImplementor to detect:
-		 *  - whether or not we need to start the JTA transaction
-		 *  - start it
-		 */
-		//TODO get SessionFactoryImplementor it from the SearchFactory as we might get a hold of the SFI at startup time
-		// if that's the case, SearchFactory should expose something like T unwrap(Class<T> clazz);
-		this.factory = (SessionFactoryImplementor) factory;
-		this.sessionAwareRunnable = null;
+		this.batchContext = batchContext;
+		this.transactionTimeout = transactionTimeout;
+		this.tenantId = tenantId;
 		this.statelessSessionAwareRunnable = statelessSessionAwareRunnable;
-		this.errorHandler = errorHandler;
+		this.wrapInTransaction = batchContext.wrapInTransaction();
 	}
 
-	public void run() {
-		try {
-			final boolean wrapInTransaction = wrapInTransaction();
-			if ( wrapInTransaction ) {
-				TransactionManager transactionManager = getTransactionManager();
-				try {
-					final Session session;
-					final StatelessSession statelessSession;
-					if ( sessionAwareRunnable != null ) {
-						session = factory.openSession();
-						statelessSession = null;
-					}
-					else {
-						session = null;
-						statelessSession = factory.openStatelessSession();
-					}
+	@Override
+	public void runWithErrorHandler() throws Exception {
+		if ( wrapInTransaction ) {
+			final StatelessSession statelessSession = batchContext
+					.factory
+					.withStatelessOptions()
+					.tenantIdentifier( tenantId )
+					.openStatelessSession();
 
-					transactionManager.begin();
-
-					if ( sessionAwareRunnable != null ) {
-						sessionAwareRunnable.run( session );
-					}
-					else {
-						statelessSessionAwareRunnable.run( statelessSession );
-					}
-
-					transactionManager.commit();
-
-					if ( sessionAwareRunnable != null ) {
-						session.close();
-					}
-					else {
-						statelessSession.close();
-					}
-				}
-				catch (Throwable e) {
-					errorHandler.handleException( log.massIndexerUnexpectedErrorMessage() , e);
-					try {
-						transactionManager.rollback();
-					}
-					catch ( SystemException e1 ) {
-						// we already have an exception, don't propagate this one
-						log.errorRollingBackTransaction( e.getMessage(), e1 );
-					}
-				}
+			if ( transactionTimeout != null ) {
+				batchContext.transactionManager.setTransactionTimeout( transactionTimeout );
 			}
-			else {
-				if ( sessionAwareRunnable != null ) {
-					sessionAwareRunnable.run( null );
-				}
-				else {
-					statelessSessionAwareRunnable.run( null );
-				}
+			batchContext.transactionManager.begin();
+			statelessSessionAwareRunnable.run( statelessSession );
+			batchContext.transactionManager.commit();
+
+			statelessSession.close();
+		}
+		else {
+			statelessSessionAwareRunnable.run( null );
+		}
+	}
+
+	@Override
+	protected void cleanUpOnError() {
+		if ( wrapInTransaction ) {
+			try {
+				batchContext.transactionManager.rollback();
+			}
+			catch (SystemException e) {
+				log.errorRollingBackTransaction( e.getMessage(), e );
 			}
 		}
-		catch (Throwable e) {
-			errorHandler.handleException( log.massIndexerUnexpectedErrorMessage() , e);
-		}
 	}
 
-	private TransactionManager getTransactionManager() {
-		return factory.getServiceRegistry().getService( JtaPlatform.class ).retrieveTransactionManager();
-	}
-
-	boolean wrapInTransaction() {
-		final TransactionFactory transactionFactory = factory.getServiceRegistry().getService( TransactionFactory.class );
-		if ( !transactionFactory.compatibleWithJtaSynchronization() ) {
-			//Today we only require a TransactionManager on JTA based transaction factories
-			log.trace( "TransactionFactory does not require a TransactionManager: don't wrap in a JTA transaction" );
-			return false;
-		}
-		final TransactionManager transactionManager = getTransactionManager();
-		if ( transactionManager == null ) {
-			//no TM, nothing to do OR configuration mistake
-			log.trace( "No TransactionManager found, do not start a surrounding JTA transaction" );
-			return false;
-		}
-		try {
-			if ( transactionManager.getStatus() == Status.STATUS_NO_TRANSACTION ) {
-				log.trace( "No Transaction in progress, needs to start a JTA transaction" );
-				return true;
-			}
-		}
-		catch ( SystemException e ) {
-			log.cannotGuessTransactionStatus( e );
-			return false;
-		}
-		log.trace( "Transaction in progress, no needs to start a JTA transaction" );
-		return false;
-	}
 }

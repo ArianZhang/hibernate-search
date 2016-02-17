@@ -1,22 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.cfg;
 
@@ -24,11 +10,13 @@ import java.lang.annotation.ElementType;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.apache.solr.analysis.TokenizerFactory;
-
+import org.apache.lucene.analysis.util.TokenizerFactory;
+import org.hibernate.search.annotations.Analyze;
 import org.hibernate.search.annotations.Index;
+import org.hibernate.search.annotations.Norms;
 import org.hibernate.search.annotations.Store;
 import org.hibernate.search.annotations.TermVector;
+import org.hibernate.search.bridge.FieldBridge;
 
 public class IndexedClassBridgeMapping {
 
@@ -38,14 +26,29 @@ public class IndexedClassBridgeMapping {
 	private final IndexedMapping indexedMapping;
 
 	public IndexedClassBridgeMapping(SearchMapping mapping, EntityDescriptor entity, Class<?> impl, IndexedMapping indexedMapping) {
+		this( mapping, entity, indexedMapping );
+
+		entity.addClassBridgeDef( classBridge );
+
+		if ( impl != null ) {
+			this.classBridge.put( "impl", impl );
+		}
+	}
+
+	public IndexedClassBridgeMapping(SearchMapping mapping, EntityDescriptor entity, FieldBridge instance, IndexedMapping indexedMapping) {
+		this( mapping, entity, indexedMapping );
+
+		entity.addClassBridgeInstanceDef( instance, classBridge );
+
+		// the given bridge instance is actually used, a class object is still required to instantiate the annotation
+		this.classBridge.put( "impl", void.class );
+	}
+
+	private IndexedClassBridgeMapping(SearchMapping mapping, EntityDescriptor entity, IndexedMapping indexedMapping) {
 		this.mapping = mapping;
 		this.entity = entity;
 		this.indexedMapping = indexedMapping;
 		this.classBridge = new HashMap<String, Object>();
-		entity.addClassBridgeDef( classBridge );
-		if ( impl != null ) {
-			this.classBridge.put( "impl", impl );
-		}
 	}
 
 	public IndexedClassBridgeMapping name(String name) {
@@ -60,6 +63,16 @@ public class IndexedClassBridgeMapping {
 
 	public IndexedClassBridgeMapping index(Index index) {
 		this.classBridge.put( "index", index );
+		return this;
+	}
+
+	public IndexedClassBridgeMapping analyze(Analyze analyze) {
+		this.classBridge.put( "analyze", analyze );
+		return this;
+	}
+
+	public IndexedClassBridgeMapping norms(Norms norms) {
+		this.classBridge.put( "norms", norms );
 		return this;
 	}
 
@@ -98,6 +111,20 @@ public class IndexedClassBridgeMapping {
 
 	public IndexedClassBridgeMapping classBridge(Class<?> impl) {
 		return new IndexedClassBridgeMapping( mapping, entity, impl, indexedMapping );
+	}
+
+	/**
+	 * Registers the given class bridge for the currently configured entity type. Any subsequent analyzer, parameter
+	 * etc. configurations apply to this class bridge.
+	 *
+	 * @param instance a class bridge instance
+	 * @return a new {@link ClassBridgeMapping} following the method chaining pattern
+	 * @hsearch.experimental This method is considered experimental and it may be altered or removed in future releases
+	 * @throws org.hibernate.search.exception.SearchException in case the same bridge instance is passed more than once for the
+	 * currently configured entity type
+	 */
+	public IndexedClassBridgeMapping classBridgeInstance(FieldBridge instance) {
+		return new IndexedClassBridgeMapping( mapping, entity, instance, indexedMapping );
 	}
 
 	public FullTextFilterDefMapping fullTextFilterDef(String name, Class<?> impl) {

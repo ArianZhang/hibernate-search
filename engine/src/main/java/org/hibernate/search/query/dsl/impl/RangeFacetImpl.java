@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2011, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.query.dsl.impl;
 
@@ -29,10 +12,7 @@ import org.apache.lucene.search.NumericRangeQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermRangeQuery;
 
-import org.hibernate.annotations.common.AssertionFailure;
-import org.hibernate.search.bridge.spi.ConversionContext;
-import org.hibernate.search.bridge.util.impl.ContextualExceptionBridgeHelper;
-import org.hibernate.search.engine.spi.DocumentBuilderIndexedEntity;
+import org.hibernate.search.exception.AssertionFailure;
 import org.hibernate.search.query.facet.RangeFacet;
 
 /**
@@ -49,37 +29,22 @@ public class RangeFacetImpl<T> extends AbstractFacet implements RangeFacet<T> {
 	 */
 	private final int rangeIndex;
 
-	/**
-	 * The document builder.
-	 */
-	private final DocumentBuilderIndexedEntity<?> documentBuilder;
-
-	RangeFacetImpl(String facetingName, String fieldName, FacetRange<T> range, int count, int index, DocumentBuilderIndexedEntity<?> documentBuilder) {
+	RangeFacetImpl(String facetingName, String fieldName, FacetRange<T> range, int count, int index) {
 		super( facetingName, fieldName, range.getRangeString(), count );
 		this.range = range;
 		this.rangeIndex = index;
-		this.documentBuilder = documentBuilder;
 	}
 
 	@Override
 	public Query getFacetQuery() {
 		Object minOrMax = getNonNullMinOrMax( range );
-		if ( minOrMax instanceof Number ) {
+		if ( minOrMax instanceof Number || minOrMax instanceof Date ) {
 			return createNumericRangeQuery();
 		}
 		else if ( minOrMax instanceof String ) {
 			return createRangeQuery(
 					(String) range.getMin(),
 					(String) range.getMax(),
-					range.isMinIncluded(),
-					range.isMaxIncluded()
-			);
-		}
-		else if ( minOrMax instanceof Date ) {
-			final ConversionContext conversionContext = new ContextualExceptionBridgeHelper();
-			return createRangeQuery(
-					documentBuilder.objectToString( getFieldName(), range.getMin(), conversionContext ),
-					documentBuilder.objectToString( getFieldName(), range.getMax(), conversionContext ),
 					range.isMinIncluded(),
 					range.isMaxIncluded()
 			);
@@ -93,18 +58,22 @@ public class RangeFacetImpl<T> extends AbstractFacet implements RangeFacet<T> {
 		return rangeIndex;
 	}
 
+	@Override
 	public T getMin() {
 		return range.getMin();
 	}
 
+	@Override
 	public T getMax() {
 		return range.getMax();
 	}
 
+	@Override
 	public boolean isIncludeMin() {
 		return range.isMinIncluded();
 	}
 
+	@Override
 	public boolean isIncludeMax() {
 		return range.isMaxIncluded();
 	}
@@ -148,12 +117,21 @@ public class RangeFacetImpl<T> extends AbstractFacet implements RangeFacet<T> {
 					range.isMaxIncluded()
 			);
 		}
-
 		else if ( minOrMax instanceof Long ) {
 			query = NumericRangeQuery.newLongRange(
 					getFieldName(),
 					(Long) range.getMin(),
 					(Long) range.getMax(),
+					range.isMinIncluded(),
+					range.isMaxIncluded()
+			);
+		}
+		else if ( minOrMax instanceof Date ) {
+			query = NumericRangeQuery.newLongRange(
+					getFieldName(),
+					range.getMin() == null ? null : ( (Date) range.getMin() ).getTime(),
+					range.getMax() == null ? null : ( (Date) range.getMax() ).getTime(),
+
 					range.isMinIncluded(),
 					range.isMaxIncluded()
 			);
@@ -165,14 +143,7 @@ public class RangeFacetImpl<T> extends AbstractFacet implements RangeFacet<T> {
 	}
 
 	private Query createRangeQuery(String min, String max, boolean includeMin, boolean includeMax) {
-		return new TermRangeQuery(
-				getFieldName(),
-				min,
-				max,
-				includeMin,
-				includeMax
-		);
+		return TermRangeQuery.newStringRange( getFieldName(), min, max, includeMin, includeMax );
 	}
+
 }
-
-

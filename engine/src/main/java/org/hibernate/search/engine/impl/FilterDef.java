@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.engine.impl;
 
@@ -28,10 +11,12 @@ import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.hibernate.search.SearchException;
 import org.hibernate.search.annotations.FilterCacheModeType;
 import org.hibernate.search.annotations.FullTextFilterDef;
+import org.hibernate.search.exception.SearchException;
 import org.hibernate.search.util.impl.ReflectionHelper;
+import org.hibernate.search.util.logging.impl.Log;
+import org.hibernate.search.util.logging.impl.LoggerFactory;
 
 /**
  * A wrapper class which encapsulates all required information to create a defined filter.
@@ -40,9 +25,12 @@ import org.hibernate.search.util.impl.ReflectionHelper;
  */
 //TODO serialization
 public class FilterDef {
+
+	private static final Log LOG = LoggerFactory.make();
+
 	private Method factoryMethod;
 	private Method keyMethod;
-	private Map<String, Method> setters = new HashMap<String, Method>();
+	private final Map<String, Method> setters = new HashMap<String, Method>();
 	private final FilterCacheModeType cacheMode;
 	private final Class<?> impl;
 	private final String name;
@@ -94,15 +82,15 @@ public class FilterDef {
 		try {
 			method.invoke( filter, parameterValue );
 		}
-		catch (IllegalAccessException e) {
-			throw new SearchException( "Unable to set Filter parameter: " + parameterName + " on filter class: " + this.impl, e );
+		catch (IllegalAccessException | InvocationTargetException | IllegalArgumentException e) {
+			throw LOG.unableToSetFilterParameter( impl, parameterName, e );
 		}
-		catch (InvocationTargetException e) {
-			throw new SearchException( "Unable to set Filter parameter: " + parameterName + " on filter class: " + this.impl, e );
-		}
-		catch (IllegalArgumentException e) {
-			throw new SearchException( "Unable to set Filter parameter: " + parameterName + " on filter class: "
-					+ this.impl + " : " + e.getMessage(), e );
-		}
+	}
+
+	@Override
+	public String toString() {
+		return "FilterDef [name=" + name + ", impl=" + impl + ", cacheMode=" + cacheMode + ", factoryMethod="
+				+ ( factoryMethod != null ? factoryMethod.getName() : null ) + ", keyMethod=" + ( keyMethod != null ? keyMethod.getName() : null )
+				+ ", setters=" + setters.keySet() + "]";
 	}
 }

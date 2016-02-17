@@ -1,63 +1,52 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.compression;
 
 import java.util.List;
 import java.util.zip.DataFormatException;
 
-import junit.framework.Assert;
-import org.apache.lucene.analysis.SimpleAnalyzer;
+import org.apache.lucene.analysis.core.SimpleAnalyzer;
 import org.apache.lucene.document.CompressionTools;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Fieldable;
 import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.queryParser.ParseException;
-import org.apache.lucene.queryParser.QueryParser;
+import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.queryparser.classic.ParseException;
+import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
-
 import org.hibernate.Session;
 import org.hibernate.search.FullTextQuery;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.test.SearchTestCase;
-import org.hibernate.search.test.TestConstants;
+import org.hibernate.search.test.SearchTestBase;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * @author Sanne Grinovero
  * @author Hardy Ferentschik
  */
-public class CompressionTest extends SearchTestCase {
+public class CompressionTest extends SearchTestBase {
 
 	/**
 	 * Verifies the fields are really stored in compressed format
 	 *
 	 * @throws Exception in case the test fails
 	 */
+	@Test
 	public void testFieldWasCompressed() throws Exception {
 		IndexReader indexReader = getSearchFactory().getIndexReaderAccessor().open( LargeDocument.class );
 		try {
@@ -68,10 +57,10 @@ public class CompressionTest extends SearchTestCase {
 			ScoreDoc doc = topDocs.scoreDocs[0];
 			Document document = indexReader.document( doc.doc );
 			{
-				Fieldable[] fields = document.getFieldables( "title" );
+				IndexableField[] fields = document.getFields( "title" );
 				assertEquals( 1, fields.length );
-				assertTrue( fields[0].isIndexed() );
-				assertTrue( fields[0].isStored() );
+				assertNotNull( fields[0].fieldType().indexOptions() );
+				assertTrue( fields[0].fieldType().stored() );
 				assertFalse( isCompressed( fields[0] ) );
 				assertEquals(
 						"Hibernate in Action, third edition",
@@ -79,7 +68,7 @@ public class CompressionTest extends SearchTestCase {
 				);
 			}
 			{
-				Fieldable[] fields = document.getFieldables( "abstract" );
+				IndexableField[] fields = document.getFields( "abstract" );
 				assertEquals( 1, fields.length );
 				assertTrue( isCompressed( fields[0] ) );
 				assertEquals(
@@ -88,7 +77,7 @@ public class CompressionTest extends SearchTestCase {
 				);
 			}
 			{
-				Fieldable[] fields = document.getFieldables( "text" );
+				IndexableField[] fields = document.getFields( "text" );
 				assertEquals( 1, fields.length );
 				assertTrue( isCompressed( fields[0] ) );
 				assertEquals(
@@ -107,6 +96,7 @@ public class CompressionTest extends SearchTestCase {
 	 *
 	 * @throws Exception in case the test fails
 	 */
+	@Test
 	public void testCompressedFieldSearch() throws Exception {
 		assertFindsN( 1, "title:third" );
 		assertFindsN( 1, "abstract:jpa2" );
@@ -117,8 +107,8 @@ public class CompressionTest extends SearchTestCase {
 	private void assertFindsN(int expectedToFind, String queryString) throws ParseException {
 		openSession().beginTransaction();
 		try {
-			FullTextSession fullTextSession = Search.getFullTextSession( session );
-			QueryParser queryParser = new QueryParser( TestConstants.getTargetLuceneVersion(), "", new SimpleAnalyzer( TestConstants.getTargetLuceneVersion() ) );
+			FullTextSession fullTextSession = Search.getFullTextSession( getSession() );
+			QueryParser queryParser = new QueryParser( "", new SimpleAnalyzer() );
 			Query query = queryParser.parse( queryString );
 			FullTextQuery fullTextQuery = fullTextSession.createFullTextQuery(
 					query,
@@ -132,18 +122,19 @@ public class CompressionTest extends SearchTestCase {
 			}
 		}
 		finally {
-			session.getTransaction().commit();
-			session.close();
+			getSession().getTransaction().commit();
+			getSession().close();
 		}
 	}
 
 	/**
 	 * Verify that projection is able to inflate stored data
 	 */
+	@Test
 	public void testProjectionOnCompressedFields() {
 		openSession().beginTransaction();
 		try {
-			FullTextSession fullTextSession = Search.getFullTextSession( session );
+			FullTextSession fullTextSession = Search.getFullTextSession( getSession() );
 			FullTextQuery fullTextQuery = fullTextSession.createFullTextQuery(
 					new MatchAllDocsQuery(),
 					LargeDocument.class
@@ -156,44 +147,45 @@ public class CompressionTest extends SearchTestCase {
 			Assert.assertEquals( "This is a placeholder for the new text that you should write", results[2] );
 		}
 		finally {
-			session.getTransaction().commit();
-			session.close();
+			getSession().getTransaction().commit();
+			getSession().close();
 		}
 	}
 
-	private String restoreValue(Fieldable field) throws DataFormatException {
-		if ( field.isBinary() ) {
+	private String restoreValue(IndexableField field) throws DataFormatException {
+		if ( field.binaryValue() != null ) {
 			Assert.assertNull( "we rely on this in the Projection implementation", field.stringValue() );
-			return CompressionTools.decompressString( field.getBinaryValue() );
+			return CompressionTools.decompressString( field.binaryValue() );
 		}
 		else {
 			return field.stringValue();
 		}
 	}
 
-	private boolean isCompressed(Fieldable field) {
-		if ( !field.isBinary() ) {
+	private boolean isCompressed(IndexableField field) {
+		if ( field.binaryValue() == null ) {
 			return false;
 		}
 		else {
 			try {
-				CompressionTools.decompressString( field.getBinaryValue() );
+				CompressionTools.decompressString( field.binaryValue() );
 				return true;
 			}
-			catch ( DataFormatException e ) {
+			catch (DataFormatException e) {
 				return false;
 			}
 		}
 	}
 
 	@Override
-	protected Class<?>[] getAnnotatedClasses() {
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] {
 				LargeDocument.class
 		};
 	}
 
 	@Override
+	@Before
 	public void setUp() throws Exception {
 		super.setUp();
 		Session s = openSession();

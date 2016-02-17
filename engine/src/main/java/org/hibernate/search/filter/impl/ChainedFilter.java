@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.filter.impl;
 
@@ -27,11 +10,12 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.LeafReader;
+import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.DocIdSet;
 import org.apache.lucene.search.Filter;
-
-import org.hibernate.annotations.common.AssertionFailure;
+import org.apache.lucene.util.Bits;
+import org.hibernate.search.exception.AssertionFailure;
 
 /**
  * A Filter capable of chaining other filters, so that it's
@@ -44,7 +28,6 @@ import org.hibernate.annotations.common.AssertionFailure;
  * @author Hardy Ferentschik
  */
 public class ChainedFilter extends Filter {
-	private static final long serialVersionUID = -6153052295766531920L;
 
 	private final List<Filter> chainedFilters = new ArrayList<Filter>();
 
@@ -76,33 +59,40 @@ public class ChainedFilter extends Filter {
 	}
 
 	@Override
-	public DocIdSet getDocIdSet(IndexReader reader) throws IOException {
+	public DocIdSet getDocIdSet(LeafReaderContext context, Bits acceptDocs) throws IOException {
 		int size = chainedFilters.size();
 		if ( size == 0 ) {
 			throw new AssertionFailure( "No filters to chain" );
 		}
 		else if ( size == 1 ) {
-			return chainedFilters.get( 0 ).getDocIdSet( reader );
+			return chainedFilters.get( 0 ).getDocIdSet( context, acceptDocs );
 		}
 		else {
 			List<DocIdSet> subSets = new ArrayList<DocIdSet>( size );
 			for ( Filter f : chainedFilters ) {
-				subSets.add( f.getDocIdSet( reader ) );
+				subSets.add( f.getDocIdSet( context, acceptDocs ) );
 			}
-			subSets = FilterOptimizationHelper.mergeByBitAnds( subSets );
-			if ( subSets.size() == 1 ) {
-				return subSets.get( 0 );
-			}
+			final LeafReader reader = context.reader();
 			return new AndDocIdSet( subSets, reader.maxDoc() );
 		}
 	}
 
 	@Override
-	public String toString() {
+	public String toString(String field) {
 		final StringBuilder sb = new StringBuilder();
-		sb.append( "ChainedFilter" );
-		sb.append( "{chainedFilters=" ).append( chainedFilters );
+		boolean first = true;
+		sb.append( "ChainedFilter{chainedFilters=" );
+		for ( Filter filter : chainedFilters ) {
+			if ( first ) {
+				first = false;
+			}
+			else {
+				sb.append( ", " );
+			}
+			sb.append( filter.toString( field ) );
+		}
 		sb.append( '}' );
 		return sb.toString();
 	}
+
 }

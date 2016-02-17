@@ -1,48 +1,36 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.bridge;
 
 import java.util.List;
+import java.util.Map;
 
-import org.apache.lucene.analysis.SimpleAnalyzer;
-import org.apache.lucene.queryParser.QueryParser;
-import org.apache.lucene.search.Query;
+import org.apache.lucene.analysis.core.SimpleAnalyzer;
 import org.apache.lucene.document.Document;
-import org.hibernate.Transaction;
+import org.apache.lucene.queryparser.classic.QueryParser;
+import org.apache.lucene.search.Query;
 import org.hibernate.ScrollableResults;
-import org.hibernate.cfg.Configuration;
-import org.hibernate.search.Environment;
+import org.hibernate.Transaction;
+import org.hibernate.search.FullTextQuery;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.FullTextQuery;
-import org.hibernate.search.test.SearchTestCase;
-import org.hibernate.search.test.TestConstants;
+import org.hibernate.search.cfg.Environment;
+import org.hibernate.search.test.SearchTestBase;
+import org.hibernate.search.testsupport.TestConstants;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * @author John Griffin
  */
-public class ClassBridgeTest extends SearchTestCase {
+public class ClassBridgeTest extends SearchTestBase {
 
 	/**
 	 * This tests that a field created by a user-supplied
@@ -51,6 +39,7 @@ public class ClassBridgeTest extends SearchTestCase {
 	 *
 	 * @throws Exception
 	 */
+	@Test
 	public void testClassBridges() throws Exception {
 		org.hibernate.Session s = openSession();
 		Transaction tx = s.beginTransaction();
@@ -68,7 +57,7 @@ public class ClassBridgeTest extends SearchTestCase {
 		// Departments entity after being massaged by passing it
 		// through the EquipmentType class. This field is in
 		// the Lucene document but not in the Department entity itself.
-		QueryParser parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "equipment", TestConstants.simpleAnalyzer );
+		QueryParser parser = new QueryParser( "equipment", TestConstants.simpleAnalyzer );
 
 		// Check the second ClassBridge annotation
 		Query query = parser.parse( "equiptype:Cisco" );
@@ -88,7 +77,7 @@ public class ClassBridgeTest extends SearchTestCase {
 		assertTrue( "problem with field cross-ups", result.size() == 0 );
 
 		// Non-ClassBridge field.
-		parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "branchHead", TestConstants.simpleAnalyzer );
+		parser = new QueryParser( "branchHead", TestConstants.simpleAnalyzer );
 		query = parser.parse( "branchHead:Kent Lewin" );
 		hibQuery = session.createFullTextQuery( query, Departments.class );
 		result = hibQuery.list();
@@ -97,7 +86,7 @@ public class ClassBridgeTest extends SearchTestCase {
 		assertEquals( "incorrect entity returned", "Kent Lewin", ( result.get( 0 ) ).getBranchHead() );
 
 		// Check other ClassBridge annotation.
-		parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "branchnetwork", TestConstants.simpleAnalyzer );
+		parser = new QueryParser( "branchnetwork", TestConstants.simpleAnalyzer );
 		query = parser.parse( "branchnetwork:st. george 1D" );
 		hibQuery = session.createFullTextQuery( query, Departments.class );
 		result = hibQuery.list();
@@ -107,8 +96,9 @@ public class ClassBridgeTest extends SearchTestCase {
 		assertEquals( "incorrect number of results returned", 1, result.size() );
 
 		// cleanup
-		for ( Object element : s.createQuery( "from " + Departments.class.getName() ).list() )
+		for ( Object element : s.createQuery( "from " + Departments.class.getName() ).list() ) {
 			s.delete( element );
+		}
 		tx.commit();
 		s.close();
 	}
@@ -120,6 +110,7 @@ public class ClassBridgeTest extends SearchTestCase {
 	 *
 	 * @throws Exception
 	 */
+	@Test
 	public void testClassBridgesWithProjection() throws Exception {
 		org.hibernate.Session s = openSession();
 		Transaction tx = s.beginTransaction();
@@ -137,7 +128,7 @@ public class ClassBridgeTest extends SearchTestCase {
 		// Departments entity after being massaged by passing it
 		// through the EquipmentType class. This field is in
 		// the Lucene document but not in the Department entity itself.
-		QueryParser parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "equipment", TestConstants.simpleAnalyzer );
+		QueryParser parser = new QueryParser( "equipment", TestConstants.simpleAnalyzer );
 
 		// Check the second ClassBridge annotation
 		Query query = parser.parse( "equiptype:Cisco" );
@@ -156,10 +147,10 @@ public class ClassBridgeTest extends SearchTestCase {
 		assertEquals( "id incorrect", 1, ((Departments)projection[0]).getId() );
 		assertTrue( "DOCUMENT incorrect", projection[1] instanceof Document );
 		assertEquals( "DOCUMENT size incorrect", 8, ( (Document) projection[1] ).getFields().size() );
-		assertNotNull( "equiptype is null", ( (Document) projection[1] ).getFieldable( "equiptype" ) );
-		assertEquals( "equiptype incorrect", "Cisco", ( (Document) projection[1] ).getFieldable( "equiptype" ).stringValue() );
-		assertNotNull( "branchnetwork is null", ( (Document) projection[1] ).getFieldable( "branchnetwork" ) );
-		assertEquals( "branchnetwork incorrect", "Salt Lake City 1A", ( (Document) projection[1] ).getFieldable( "branchnetwork" ).stringValue() );
+		assertNotNull( "equiptype is null", ( (Document) projection[1] ).getField( "equiptype" ) );
+		assertEquals( "equiptype incorrect", "Cisco", ( (Document) projection[1] ).getField( "equiptype" ).stringValue() );
+		assertNotNull( "branchnetwork is null", ( (Document) projection[1] ).getField( "branchnetwork" ) );
+		assertEquals( "branchnetwork incorrect", "Salt Lake City 1A", ( (Document) projection[1] ).getField( "branchnetwork" ).stringValue() );
 
 		projections.next();
 		projection = projections.get();
@@ -168,14 +159,16 @@ public class ClassBridgeTest extends SearchTestCase {
 		assertEquals( "id incorrect", 4, ((Departments)projection[0]).getId() );
 		assertTrue( "DOCUMENT incorrect", projection[1] instanceof Document );
 		assertEquals( "DOCUMENT size incorrect", 8, ( (Document) projection[1] ).getFields().size() );
-		assertNotNull( "equiptype is null", ( (Document) projection[1] ).getFieldable( "equiptype" ) );
-		assertEquals( "equiptype incorrect", "Cisco", ( (Document) projection[1] ).getFieldable( "equiptype" ).stringValue() );
-		assertNotNull( "branchnetwork is null", ( (Document) projection[1] ).getFieldable( "branchnetwork" ) );
-		assertEquals( "branchnetwork incorrect", "St. George 1D", ( (Document) projection[1] ).getFieldable( "branchnetwork" ).stringValue() );
+		assertNotNull( "equiptype is null", ( (Document) projection[1] ).getField( "equiptype" ) );
+		assertEquals( "equiptype incorrect", "Cisco", ( (Document) projection[1] ).getField( "equiptype" ).stringValue() );
+		assertNotNull( "branchnetwork is null", ( (Document) projection[1] ).getField( "branchnetwork" ) );
+		assertEquals( "branchnetwork incorrect", "St. George 1D", ( (Document) projection[1] ).getField( "branchnetwork" ).stringValue() );
 
 		assertTrue( "incorrect result count returned", projections.isLast() );
 		//cleanup
-		for (Object element : s.createQuery( "from " + Departments.class.getName() ).list()) s.delete( element );
+		for ( Object element : s.createQuery( "from " + Departments.class.getName() ).list() ) {
+			s.delete( element );
+		}
 		tx.commit();
 		s.close();
 	}
@@ -187,6 +180,7 @@ public class ClassBridgeTest extends SearchTestCase {
 	 *
 	 * @throws Exception
 	 */
+	@Test
 	public void testClassBridge() throws Exception {
 		org.hibernate.Session s = openSession();
 		Transaction tx = s.beginTransaction();
@@ -203,7 +197,7 @@ public class ClassBridgeTest extends SearchTestCase {
 		// the branch field and the network field of the Department
 		// class. This is in the Lucene document but not in the
 		// Department entity itself.
-		QueryParser parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "branchnetwork", TestConstants.simpleAnalyzer );
+		QueryParser parser = new QueryParser( "branchnetwork", TestConstants.simpleAnalyzer );
 
 		Query query = parser.parse( "branchnetwork:layton 2B" );
 		org.hibernate.search.FullTextQuery hibQuery = session.createFullTextQuery( query, Department.class );
@@ -230,7 +224,7 @@ public class ClassBridgeTest extends SearchTestCase {
 		assertTrue( "problem with field cross-ups", result.size() == 0 );
 
 		// Non-ClassBridge field.
-		parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "branchHead", TestConstants.simpleAnalyzer );
+		parser = new QueryParser( "branchHead", TestConstants.simpleAnalyzer );
 		query = parser.parse( "branchHead:Kent Lewin" );
 		hibQuery = session.createFullTextQuery( query, Department.class );
 		result = hibQuery.list();
@@ -239,7 +233,9 @@ public class ClassBridgeTest extends SearchTestCase {
 		assertEquals( "incorrect entity returned", "Kent Lewin", ( (Department) result.get( 0 ) ).getBranchHead() );
 
 		//cleanup
-		for (Object element : s.createQuery( "from " + Department.class.getName() ).list()) s.delete( element );
+		for ( Object element : s.createQuery( "from " + Department.class.getName() ).list() ) {
+			s.delete( element );
+		}
 		tx.commit();
 		s.close();
 	}
@@ -323,15 +319,16 @@ public class ClassBridgeTest extends SearchTestCase {
 		return depts;
 	}
 
-	protected Class<?>[] getAnnotatedClasses() {
+	@Override
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] {
 				Department.class,
 				Departments.class
 		};
 	}
 
-	protected void configure(Configuration cfg) {
-		super.configure( cfg );
-		cfg.setProperty( Environment.ANALYZER_CLASS, SimpleAnalyzer.class.getName() );
+	@Override
+	public void configure(Map<String,Object> cfg) {
+		cfg.put( Environment.ANALYZER_CLASS, SimpleAnalyzer.class.getName() );
 	}
 }

@@ -1,77 +1,59 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2012, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.batchindexing;
 
-import junit.framework.Assert;
+import java.util.Map;
 
-import org.hibernate.search.Environment;
+import org.hibernate.search.cfg.Environment;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.engine.spi.SearchFactoryImplementor;
 import org.hibernate.search.exception.ErrorHandler;
-import org.hibernate.search.test.SearchTestCase;
+import org.hibernate.search.spi.SearchIntegrator;
+import org.hibernate.search.test.SearchTestBase;
 import org.hibernate.search.test.errorhandling.MockErrorHandler;
 import org.jboss.byteman.contrib.bmunit.BMRule;
 import org.jboss.byteman.contrib.bmunit.BMUnitRunner;
-import org.junit.Ignore;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 @RunWith(BMUnitRunner.class)
-public class MassIndexerErrorReportingTest extends SearchTestCase {
+public class MassIndexerErrorReportingTest extends SearchTestBase {
 
-	@Ignore // This test is occasionally failing, needs to be inspected. See HSEARCH-1278
 	@Test
-	@BMRule(targetClass = "org.hibernate.search.batchindexing.impl.IdentifierConsumerEntityProducer",
+	@BMRule(targetClass = "org.hibernate.search.batchindexing.impl.IdentifierConsumerDocumentProducer",
 			targetMethod = "loadList",
 			action = "throw new NullPointerException(\"Byteman created NPE\")",
 			name = "testMassIndexerErrorsReported")
 	public void testMassIndexerErrorsReported() throws InterruptedException {
-		SearchFactoryImplementor searchFactory = getSearchFactoryImpl();
-		MockErrorHandler mockErrorHandler = getErrorHandler( searchFactory );
+		SearchIntegrator integrator = getExtendedSearchIntegrator();
+		MockErrorHandler mockErrorHandler = getErrorHandler( integrator );
 
 		FullTextSession fullTextSession = prepareSomeData( this );
 
 		fullTextSession.createIndexer( Book.class ).startAndWait();
 
-		session.close();
+		getSession().close();
 		String errorMessage = mockErrorHandler.getErrorMessage();
-		Assert.assertEquals( "HSEARCH000116: Unexpected error during MassIndexer operation", errorMessage );
+		Assert.assertEquals( "HSEARCH000212: An exception occurred while the MassIndexer was transforming identifiers to Lucene Documents", errorMessage );
 		Throwable exception = mockErrorHandler.getLastException();
 		Assert.assertTrue( exception instanceof NullPointerException );
 		Assert.assertEquals( "Byteman created NPE", exception.getMessage() );
 	}
 
-	static MockErrorHandler getErrorHandler(SearchFactoryImplementor searchFactory) {
-		ErrorHandler errorHandler = searchFactory.getErrorHandler();
+	static MockErrorHandler getErrorHandler(SearchIntegrator integrator) {
+		ErrorHandler errorHandler = integrator.getErrorHandler();
 		Assert.assertTrue( errorHandler instanceof MockErrorHandler );
 		MockErrorHandler mockErrorHandler = (MockErrorHandler) errorHandler;
 		return mockErrorHandler;
 	}
 
-	static FullTextSession prepareSomeData(SearchTestCase testcase) {
-		FullTextSession fullTextSession = Search.getFullTextSession( testcase.openSession() );
+	static FullTextSession prepareSomeData(SearchTestBase testCase) {
+		FullTextSession fullTextSession = Search.getFullTextSession( testCase.openSession() );
 		fullTextSession.beginTransaction();
 		Nation france = new Nation( "France", "FR" );
 		fullTextSession.save( france );
@@ -83,13 +65,14 @@ public class MassIndexerErrorReportingTest extends SearchTestCase {
 		return fullTextSession;
 	}
 
-	protected Class<?>[] getAnnotatedClasses() {
+	@Override
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] { Book.class, Nation.class };
 	}
 
-	protected void configure(org.hibernate.cfg.Configuration cfg) {
-		super.configure( cfg );
-		cfg.setProperty( Environment.ERROR_HANDLER, MockErrorHandler.class.getName() );
+	@Override
+	public void configure(Map<String,Object> cfg) {
+		cfg.put( Environment.ERROR_HANDLER, MockErrorHandler.class.getName() );
 	}
 
 }

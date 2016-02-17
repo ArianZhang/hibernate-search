@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.batchindexing.impl;
 
@@ -36,24 +19,22 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class ProducerConsumerQueue<T> {
 
-	private static final int DEFAULT_BUFF_LENGHT = 1000;
+	private static final int DEFAULT_BUFF_LENGTH = 1000;
 	private static final Object exitToken = new Object();
 
-	//doesn't use generics here as exitToken needs to be put in the queue too:
-	@SuppressWarnings("unchecked")
-	private final BlockingQueue queue;
+	//doesn't use <T> here as exitToken needs to be put in the queue too:
+	private final BlockingQueue<Object> queue;
 	private final AtomicInteger producersToWaitFor;
 
 	/**
 	 * @param producersToWaitFor The number of producer threads.
 	 */
 	public ProducerConsumerQueue( int producersToWaitFor ) {
-		this( DEFAULT_BUFF_LENGHT, producersToWaitFor );
+		this( DEFAULT_BUFF_LENGTH, producersToWaitFor );
 	}
 
-	@SuppressWarnings("unchecked")
-	public ProducerConsumerQueue( int queueLenght, int producersToWaitFor ) {
-		queue = new ArrayBlockingQueue( queueLenght );
+	public ProducerConsumerQueue( int queueLength, int producersToWaitFor ) {
+		queue = new ArrayBlockingQueue<Object>( queueLength );
 		this.producersToWaitFor = new AtomicInteger( producersToWaitFor );
 	}
 
@@ -61,7 +42,7 @@ public class ProducerConsumerQueue<T> {
 	 * Blocks until an object is available; when null
 	 * is returned the client thread should quit.
 	 * @return the next object in the queue, or null to exit
-	 * @throws InterruptedException
+	 * @throws InterruptedException if interrupted while waiting
 	 */
 	@SuppressWarnings("unchecked")
 	public T take() throws InterruptedException {
@@ -79,10 +60,9 @@ public class ProducerConsumerQueue<T> {
 	/**
 	 * Adds a new object to the queue, blocking if no space is
 	 * available.
-	 * @param obj
-	 * @throws InterruptedException
+	 * @param obj the object to add to the queue
+	 * @throws InterruptedException if interrupted while waiting
 	 */
-	@SuppressWarnings("unchecked")
 	public void put(T obj) throws InterruptedException {
 		queue.put( obj );
 	}
@@ -95,7 +75,6 @@ public class ProducerConsumerQueue<T> {
 	 * awake sleeping consumers and have them quit, after the
 	 * queue has been processed.
 	 */
-	@SuppressWarnings("unchecked")
 	public void producerStopping() {
 		int activeProducers = producersToWaitFor.decrementAndGet();
 		//last producer must close consumers

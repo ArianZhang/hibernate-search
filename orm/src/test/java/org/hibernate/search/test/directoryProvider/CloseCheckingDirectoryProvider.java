@@ -1,20 +1,8 @@
 /*
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
+ * Hibernate Search, full-text search for your domain model
  *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.test.directoryProvider;
@@ -22,8 +10,8 @@ package org.hibernate.search.test.directoryProvider;
 import java.util.Properties;
 
 import org.apache.lucene.store.RAMDirectory;
-import org.hibernate.search.SearchException;
-import org.hibernate.search.indexes.impl.DirectoryBasedIndexManager;
+import org.hibernate.search.exception.SearchException;
+import org.hibernate.search.indexes.spi.DirectoryBasedIndexManager;
 import org.hibernate.search.spi.BuildContext;
 import org.hibernate.search.store.impl.RAMDirectoryProvider;
 
@@ -31,7 +19,7 @@ import org.hibernate.search.store.impl.RAMDirectoryProvider;
  * Verifies that a DirectoryProvider lifecycle is managed properly:
  * it's initialized and started at SearchFactory initialization and closed at shutdown.
  *
- * @author Sanne Grinovero <sanne@hibernate.org> (C) 2011 Red Hat Inc.
+ * @author Sanne Grinovero (C) 2011 Red Hat Inc.
  */
 public class CloseCheckingDirectoryProvider extends RAMDirectoryProvider {
 
@@ -45,7 +33,7 @@ public class CloseCheckingDirectoryProvider extends RAMDirectoryProvider {
 		if ( initialized ) {
 			throw new SearchException( "Initialized twice" );
 		}
-		if ( started) {
+		if ( started ) {
 			throw new SearchException( "Initialized after start" );
 		}
 		if ( stopped ) {

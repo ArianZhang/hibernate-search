@@ -1,44 +1,106 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2012 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.bridge.builtin;
 
 import org.apache.lucene.document.Document;
+import org.apache.lucene.index.IndexableField;
+import org.hibernate.search.bridge.FieldBridge;
 import org.hibernate.search.bridge.LuceneOptions;
 import org.hibernate.search.bridge.TwoWayFieldBridge;
 
 /**
- * Bridge to index numeric values using a Trie structure (multiple terms representing different precisions)
+ * Stateless field bridges for the conversion of numbers to numeric field values.
  *
- * @author Gustavo Fernandes
+ * @author Sanne Grinovero
+ * @author Gunnar Morling
  */
-public abstract class NumericFieldBridge implements TwoWayFieldBridge {
+public enum NumericFieldBridge implements FieldBridge, TwoWayFieldBridge {
 
+	/**
+	 * Persists byte properties in int index fields. Takes care of all the required conversion.
+	 */
+	BYTE_FIELD_BRIDGE {
+		@Override
+		public Object get(final String name, final Document document) {
+			final IndexableField field = document.getField( name );
+			return field != null ? field.numericValue().byteValue() : null;
+		}
+
+		@Override
+		protected void applyToLuceneOptions(LuceneOptions luceneOptions, String name, Number value, Document document) {
+			super.applyToLuceneOptions( luceneOptions, name, value.intValue(), document );
+		}
+	},
+	/**
+	 * Persists short properties in int index fields. Takes care of all the required conversion.
+	 */
+	SHORT_FIELD_BRIDGE {
+		@Override
+		public Object get(final String name, final Document document) {
+			final IndexableField field = document.getField( name );
+			return field != null ? field.numericValue().shortValue() : null;
+		}
+
+		@Override
+		protected void applyToLuceneOptions(LuceneOptions luceneOptions, String name, Number value, Document document) {
+			super.applyToLuceneOptions( luceneOptions, name, value.intValue(), document );
+		}
+	},
+	/**
+	 * Persists int properties in int index fields. Takes care of all the required conversion.
+	 */
+	INT_FIELD_BRIDGE {
+	},
+	/**
+	 * Persists float properties in float index fields. Takes care of all the required conversion.
+	 */
+	FLOAT_FIELD_BRIDGE {
+	},
+	/**
+	 * Persists double properties in double index fields. Takes care of all the required conversion.
+	 */
+	DOUBLE_FIELD_BRIDGE {
+	},
+	/**
+	 * Persists long properties in long index fields. Takes care of all the required conversion.
+	 */
+	LONG_FIELD_BRIDGE {
+	};
+
+	@Override
 	public void set(String name, Object value, Document document, LuceneOptions luceneOptions) {
-		if (value != null) {
-			luceneOptions.addNumericFieldToDocument( name, value, document );
+		if ( value == null ) {
+			if ( luceneOptions.indexNullAs() != null ) {
+				luceneOptions.addFieldToDocument( name, luceneOptions.indexNullAs(), document );
+			}
+		}
+		else {
+			applyToLuceneOptions( luceneOptions, name, (Number)value, document );
 		}
 	}
 
-	public String objectToString(Object object) {
-		return object.toString();
+	@Override
+	public final String objectToString(final Object object) {
+		return object == null ? null : object.toString();
+	}
+
+	@Override
+	public Object get(final String name, final Document document) {
+		final IndexableField field = document.getField( name );
+		if ( field != null ) {
+			return field.numericValue();
+		}
+		else {
+			return null;
+		}
+	}
+
+	protected void applyToLuceneOptions(LuceneOptions luceneOptions, String name, Number value, Document document) {
+		luceneOptions.addNumericFieldToDocument( name, value, document );
 	}
 
 }

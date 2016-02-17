@@ -1,42 +1,35 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.query;
 
+import org.apache.lucene.index.DocsAndPositionsEnum;
 import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.TermPositionVector;
-import org.apache.lucene.index.TermVectorOffsetInfo;
+import org.apache.lucene.index.Terms;
+import org.apache.lucene.index.TermsEnum;
+import org.apache.lucene.util.BytesRef;
 import org.hibernate.Transaction;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
 import org.hibernate.search.SearchFactory;
-import org.hibernate.search.test.SearchTestCase;
+import org.hibernate.search.test.SearchTestBase;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+
 
 /**
  * @author John Griffin
+ * @author Sanne Grinovero
  */
-public class TermVectorTest extends SearchTestCase {
+public class TermVectorTest extends SearchTestBase {
 
+	@Test
 	public void testPositionOffsets() throws Exception {
 		FullTextSession s = Search.getFullTextSession( openSession() );
 		createIndex( s );
@@ -53,21 +46,25 @@ public class TermVectorTest extends SearchTestCase {
 		 * to assert a few. - J.G.
 		 */
 		int x = 0; // only Document zero is tested: asserts rely on natural document order
-		TermPositionVector vector = (TermPositionVector) reader.getTermFreqVector( x, "content" );
-		assertNotNull( vector );
-		String[] terms = vector.getTerms();
-		int[] freqs = vector.getTermFrequencies();
+		Terms termVector = reader.getTermVector( x, "content" );
+		assertNotNull( termVector );
+		TermsEnum iterator = termVector.iterator();
+		BytesRef next = iterator.next(); //move to first Document: we expect it to exist
+		assertNotNull( next );
+		long totalTermFreq = iterator.totalTermFreq();
 
-		assertEquals( "electrical", terms[x] );
-		assertEquals( 2, freqs[x] );
+		assertEquals( "electrical", next.utf8ToString() );
+		assertEquals( 2, totalTermFreq );
 
-		TermVectorOffsetInfo[] offsets = vector.getOffsets( x );
-		assertEquals( 0, offsets[x].getStartOffset() );
-		assertEquals( 10, offsets[x].getEndOffset() );
+		final DocsAndPositionsEnum docsAndPositions = iterator.docsAndPositions( null, null );
+		docsAndPositions.advance( 0 );//move to Document id 0
 
-		int[] termPositions = vector.getTermPositions( 0 );
-		assertEquals( 0, termPositions[0] );
-		assertEquals( 3, termPositions[1] );
+		docsAndPositions.nextPosition();
+		assertEquals( 0, docsAndPositions.startOffset() );//first term in sentence
+		assertEquals( 10, docsAndPositions.endOffset() );
+
+		docsAndPositions.nextPosition();
+		assertEquals( 29, docsAndPositions.startOffset() );//Term is mentioned again at character 29
 
 		// cleanup
 		for ( Object element : s.createQuery( "from " + Employee.class.getName() ).list() ) {
@@ -78,6 +75,7 @@ public class TermVectorTest extends SearchTestCase {
 		s.close();
 	}
 
+	@Test
 	public void testNoTermVector() throws Exception {
 		FullTextSession s = Search.getFullTextSession( openSession() );
 		Transaction tx = s.beginTransaction();
@@ -93,8 +91,8 @@ public class TermVectorTest extends SearchTestCase {
 		SearchFactory searchFactory = s.getSearchFactory();
 		IndexReader reader = searchFactory.getIndexReaderAccessor().open( Employee.class );
 
-		TermPositionVector vector = (TermPositionVector) reader.getTermFreqVector( 0, "dept" );
-		assertNull( "should not find a term position vector", vector );
+		Terms termVector = reader.getTermVector( 0, "dept" );
+		assertNull( "should not find a term position vector", termVector );
 
 		// cleanup
 		for ( Object element : s.createQuery( "from " + ElectricalProperties.class.getName() ).list() ) {
@@ -119,7 +117,8 @@ public class TermVectorTest extends SearchTestCase {
 		tx.commit();
 	}
 
-	protected Class<?>[] getAnnotatedClasses() {
+	@Override
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] { ElectricalProperties.class, Employee.class };
 	}
 }

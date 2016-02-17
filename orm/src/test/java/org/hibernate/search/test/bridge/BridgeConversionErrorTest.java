@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2012, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.bridge;
 
@@ -30,12 +13,10 @@ import javax.persistence.Id;
 import javax.persistence.OneToOne;
 import javax.persistence.Table;
 
-import org.apache.lucene.analysis.SimpleAnalyzer;
 import org.apache.lucene.document.Document;
 
 import org.hibernate.Transaction;
-import org.hibernate.cfg.Configuration;
-import org.hibernate.search.Environment;
+
 import org.hibernate.search.annotations.ClassBridge;
 import org.hibernate.search.annotations.Field;
 import org.hibernate.search.annotations.Indexed;
@@ -43,15 +24,21 @@ import org.hibernate.search.annotations.IndexedEmbedded;
 import org.hibernate.search.bridge.BridgeException;
 import org.hibernate.search.bridge.FieldBridge;
 import org.hibernate.search.bridge.LuceneOptions;
-import org.hibernate.search.test.SearchTestCase;
-import org.hibernate.search.test.util.TestForIssue;
+import org.hibernate.search.test.SearchTestBase;
+import org.hibernate.search.testsupport.TestForIssue;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * @author Hardy Ferentschik
  */
 @TestForIssue(jiraKey = "1045")
-public class BridgeConversionErrorTest extends SearchTestCase {
+public class BridgeConversionErrorTest extends SearchTestBase {
 
+	@Test
 	public void testClassBridgeError() throws Exception {
 		ClassBridged classBridged = new ClassBridged();
 		org.hibernate.Session s = openSession();
@@ -61,7 +48,7 @@ public class BridgeConversionErrorTest extends SearchTestCase {
 			tx.commit();
 			fail();
 		}
-		catch ( Exception e ) {
+		catch (Exception e) {
 			Throwable cause = e.getCause();
 			assertTrue( cause instanceof BridgeException );
 			String expectedErrorMessage = "Exception while calling bridge#set\n" +
@@ -71,6 +58,7 @@ public class BridgeConversionErrorTest extends SearchTestCase {
 		}
 	}
 
+	@Test
 	public void testFieldBridgeError() throws Exception {
 		SimpleEntity entity = new SimpleEntity( "foo" );
 		org.hibernate.Session s = openSession();
@@ -80,7 +68,7 @@ public class BridgeConversionErrorTest extends SearchTestCase {
 			tx.commit();
 			fail();
 		}
-		catch ( Exception e ) {
+		catch (Exception e) {
 			Throwable cause = e.getCause();
 			assertTrue( cause instanceof BridgeException );
 			String expectedErrorMessage = "Exception while calling bridge#set\n" +
@@ -90,6 +78,7 @@ public class BridgeConversionErrorTest extends SearchTestCase {
 		}
 	}
 
+	@Test
 	public void testEmbeddedBridgeError() throws Exception {
 		SimpleEntity entity = new SimpleEntity( null ); // null won't throw an exception
 		EmbeddedEntity embedded = new EmbeddedEntity( "foo" );
@@ -101,7 +90,7 @@ public class BridgeConversionErrorTest extends SearchTestCase {
 			tx.commit();
 			fail();
 		}
-		catch ( Exception e ) {
+		catch (Exception e) {
 			Throwable cause = e.getCause();
 			assertTrue( cause instanceof BridgeException );
 			String expectedErrorMessage = "Exception while calling bridge#set\n" +
@@ -111,9 +100,10 @@ public class BridgeConversionErrorTest extends SearchTestCase {
 		}
 	}
 
+	@Test
 	public void testEmbeddedEmbeddedBridgeError() throws Exception {
 		SimpleEntity entity = new SimpleEntity( null ); // null won't throw an exception
-		EmbeddedEntity embedded = new EmbeddedEntity( null );  // null won't throw an exception
+		EmbeddedEntity embedded = new EmbeddedEntity( null ); // null won't throw an exception
 		entity.setEmbedded( embedded );
 		embedded.setEmbeddedEmbedded( new EmbeddedEmbeddedEntity( "foo" ) );
 		org.hibernate.Session s = openSession();
@@ -123,7 +113,7 @@ public class BridgeConversionErrorTest extends SearchTestCase {
 			tx.commit();
 			fail();
 		}
-		catch ( Exception e ) {
+		catch (Exception e) {
 			Throwable cause = e.getCause();
 			assertTrue( cause instanceof BridgeException );
 			String expectedErrorMessage = "Exception while calling bridge#set\n" +
@@ -133,18 +123,14 @@ public class BridgeConversionErrorTest extends SearchTestCase {
 		}
 	}
 
-	protected Class<?>[] getAnnotatedClasses() {
+	@Override
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] {
 				ClassBridged.class,
 				SimpleEntity.class,
 				EmbeddedEntity.class,
 				EmbeddedEmbeddedEntity.class
 		};
-	}
-
-	protected void configure(Configuration cfg) {
-		super.configure( cfg );
-		cfg.setProperty( Environment.ANALYZER_CLASS, SimpleAnalyzer.class.getName() );
 	}
 
 	public static class ExceptionThrowingBridge implements FieldBridge {
@@ -186,6 +172,9 @@ public class BridgeConversionErrorTest extends SearchTestCase {
 			this.name = name;
 		}
 
+		public SimpleEntity() {
+		}
+
 		public void setEmbedded(EmbeddedEntity embedded) {
 			this.embedded = embedded;
 		}
@@ -204,6 +193,9 @@ public class BridgeConversionErrorTest extends SearchTestCase {
 
 		public EmbeddedEntity(String name) {
 			this.name = name;
+		}
+
+		public EmbeddedEntity() {
 		}
 
 		@IndexedEmbedded
@@ -228,6 +220,9 @@ public class BridgeConversionErrorTest extends SearchTestCase {
 
 		public EmbeddedEmbeddedEntity(String name) {
 			this.name = name;
+		}
+
+		public EmbeddedEmbeddedEntity() {
 		}
 	}
 }

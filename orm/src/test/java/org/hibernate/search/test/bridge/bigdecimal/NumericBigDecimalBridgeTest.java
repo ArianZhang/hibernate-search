@@ -1,39 +1,23 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2012, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.test.bridge.bigdecimal;
 
 import java.math.BigDecimal;
 import java.util.List;
+
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.Id;
 import javax.persistence.Table;
 
 import org.apache.lucene.document.Document;
+import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.Query;
-
 import org.hibernate.Session;
 import org.hibernate.Transaction;
 import org.hibernate.dialect.SQLServer2008Dialect;
@@ -46,18 +30,26 @@ import org.hibernate.search.annotations.FieldBridge;
 import org.hibernate.search.annotations.Indexed;
 import org.hibernate.search.annotations.NumericField;
 import org.hibernate.search.bridge.LuceneOptions;
-import org.hibernate.search.bridge.builtin.NumericFieldBridge;
+import org.hibernate.search.bridge.MetadataProvidingFieldBridge;
+import org.hibernate.search.bridge.TwoWayFieldBridge;
+import org.hibernate.search.bridge.spi.FieldMetadataBuilder;
+import org.hibernate.search.bridge.spi.FieldType;
 import org.hibernate.search.query.dsl.QueryBuilder;
-import org.hibernate.search.test.SearchTestCase;
+import org.hibernate.search.test.SearchTestBase;
 import org.hibernate.testing.SkipForDialect;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 /**
  * @author Hardy Ferentschik
  */
 @SkipForDialect(value = { SybaseASE15Dialect.class, Sybase11Dialect.class, SQLServer2008Dialect.class },
 	comment = "Sybase and MSSQL don't support range large enough for this test")
-public class NumericBigDecimalBridgeTest extends SearchTestCase {
+public class NumericBigDecimalBridgeTest extends SearchTestBase {
 
+	@Test
 	public void testNumericFieldWithBigDecimals() throws Exception {
 		Session session = openSession();
 		Transaction tx = session.beginTransaction();
@@ -82,17 +74,17 @@ public class NumericBigDecimalBridgeTest extends SearchTestCase {
 				.must( queryBuilder.range().onField( "price" ).below( 20000l ).createQuery() )
 				.createQuery();
 
-
-		List<Item> resultList = (List<Item>) fullTextSession.createFullTextQuery( rootQuery, Item.class ).list();
+		@SuppressWarnings( "unchecked" )
+		List<Item> resultList = fullTextSession.createFullTextQuery( rootQuery, Item.class ).list();
 		assertNotNull( resultList );
-		assertTrue( resultList.size() == 1 );
+		assertEquals( 1, resultList.size() );
 
 		tx.commit();
 		session.close();
 	}
 
 	@Override
-	protected Class<?>[] getAnnotatedClasses() {
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class<?>[] { Item.class };
 	}
 
@@ -122,12 +114,17 @@ public class NumericBigDecimalBridgeTest extends SearchTestCase {
 		}
 	}
 
-	public static class BigDecimalNumericFieldBridge extends NumericFieldBridge {
+	public static class BigDecimalNumericFieldBridge implements MetadataProvidingFieldBridge, TwoWayFieldBridge {
 		private static final BigDecimal storeFactor = BigDecimal.valueOf( 100 );
 
 		@Override
 		public void set(String name, Object value, Document document, LuceneOptions luceneOptions) {
-			if ( value != null ) {
+			if ( value == null ) {
+				if ( luceneOptions.indexNullAs() != null ) {
+					luceneOptions.addFieldToDocument( name, luceneOptions.indexNullAs(), document );
+				}
+			}
+			else {
 				BigDecimal decimalValue = (BigDecimal) value;
 				long indexedValue = decimalValue.multiply( storeFactor ).longValue();
 				luceneOptions.addNumericFieldToDocument( name, indexedValue, document );
@@ -136,9 +133,25 @@ public class NumericBigDecimalBridgeTest extends SearchTestCase {
 
 		@Override
 		public Object get(String name, Document document) {
-			String fromLucene = document.get( name );
-			BigDecimal storedBigDecimal = new BigDecimal( fromLucene );
-			return storedBigDecimal.divide( storeFactor );
+			final IndexableField field = document.getField( name );
+			if ( field != null ) {
+				Number numericValue = field.numericValue();
+				BigDecimal bigValue = new BigDecimal( numericValue.longValue() );
+				return bigValue.divide( storeFactor );
+			}
+			else {
+				return null;
+			}
+		}
+
+		@Override
+		public final String objectToString(final Object object) {
+			return object == null ? null : String.valueOf( object );
+		}
+
+		@Override
+		public void configureFieldMetadata(String name, FieldMetadataBuilder builder) {
+			builder.field( name, FieldType.LONG );
 		}
 	}
 }

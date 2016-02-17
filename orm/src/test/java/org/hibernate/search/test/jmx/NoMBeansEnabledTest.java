@@ -1,46 +1,35 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.jmx;
 
-import java.io.File;
 import java.lang.management.ManagementFactory;
+import java.nio.file.Path;
+import java.util.Map;
+
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
-import org.hibernate.cfg.Configuration;
-import org.hibernate.search.Environment;
+import org.hibernate.search.cfg.Environment;
 import org.hibernate.search.jmx.IndexControlMBean;
 import org.hibernate.search.jmx.StatisticsInfoMBean;
-import org.hibernate.search.test.SearchTestCase;
-import org.hibernate.search.test.TestConstants;
+import org.hibernate.search.test.SearchTestBase;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+import static org.junit.Assert.assertFalse;
 
 /**
  * @author Hardy Ferentschik
  */
-public class NoMBeansEnabledTest extends SearchTestCase {
+public class NoMBeansEnabledTest extends SearchTestBase {
 	MBeanServer mbeanServer;
 
+	@Test
 	public void testMBeanNotRegisteredWithoutExplicitProperty() throws Exception {
 		mbeanServer = ManagementFactory.getPlatformMBeanServer();
 
@@ -58,21 +47,16 @@ public class NoMBeansEnabledTest extends SearchTestCase {
 	}
 
 	@Override
-	protected void configure(Configuration cfg) {
-		super.configure( cfg );
-		File targetDir = TestConstants.getTargetDir( NoMBeansEnabledTest.class );
-		File simpleJndiDir = new File( targetDir, "simpleJndi" );
-		simpleJndiDir.mkdir();
-
-		cfg.setProperty( "hibernate.session_factory_name", "java:comp/SessionFactory" );
-		cfg.setProperty( "hibernate.jndi.class", "org.osjava.sj.SimpleContextFactory" );
-		cfg.setProperty( "hibernate.jndi.org.osjava.sj.root", simpleJndiDir.getAbsolutePath() );
-		cfg.setProperty( "hibernate.jndi.org.osjava.sj.jndi.shared", "true" );
+	public void configure(Map<String,Object> cfg) {
+		Path simpleJndiDir = SimpleJNDIHelper.makeTestingJndiDirectory( NoMBeansEnabledTest.class );
+		SimpleJNDIHelper.enableSimpleJndi( cfg, simpleJndiDir );
+		cfg.put( "hibernate.session_factory_name", "java:comp/SessionFactory" );
 		// not setting the property is effectively the same as setting is explicitly to false
 		// cfg.setProperty( Environment.JMX_ENABLED, "false" );
 	}
 
 	@Override
+	@Before
 	public void setUp() throws Exception {
 		// make sure that no MBean is registered before the test runs
 		mbeanServer = ManagementFactory.getPlatformMBeanServer();
@@ -85,18 +69,17 @@ public class NoMBeansEnabledTest extends SearchTestCase {
 			mbeanServer.unregisterMBean( indexBeanObjectName );
 		}
 
-		// build the new configuration
-		setCfg( null ); // force a rebuild of the configuration
 		super.setUp();
 	}
 
 	@Override
+	@After
 	public void tearDown() throws Exception {
 		super.tearDown();
 	}
 
 	@Override
-	protected Class<?>[] getAnnotatedClasses() {
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class<?>[] { };
 	}
 }

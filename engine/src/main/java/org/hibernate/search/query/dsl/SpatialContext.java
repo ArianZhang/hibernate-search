@@ -1,50 +1,32 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.query.dsl;
 
 /**
- * @experimental This API might change in minor versions
- *
- * @author Emmanuel Bernard <emmanuel@hibernate.org>
+ * @author Emmanuel Bernard
  */
-public interface SpatialContext extends QueryCustomization<SpatialContext> {
+public interface SpatialContext extends QueryCustomization<SpatialContext>, SpatialMatchingContext {
 
 	//TODO score by proximity
 
 	/**
-	 * Used to create Spatial Queries on the default coordinates of
-	 * an entity. This is the one to use when {@link Spatial} is being used
-	 * without defining a custom value for {@link Spatial#name()}.
-	 * @return
+	 * Used to select the spatial field/coordinates used for this query. If not specified, the default field
+	 * ({@link org.hibernate.search.annotations.Spatial#COORDINATES_DEFAULT_FIELD}) is used.
+	 *
+	 * <p>
+	 * Note: An entity can have multiple {@link org.hibernate.search.annotations.Spatial} annotations defining
+	 * different sets of coordinates. Each non-default {@code Spatial} instance has a name to identify it. Use this method
+	 * to specify the targeted coordinate field.
+	 * </p>
+	 *
+	 * @param fieldName The name of the set of coordinates to target for the query
+	 *
+	 * @return {@code SpatialMatchingContext} instance for continuation
 	 */
-	SpatialMatchingContext onDefaultCoordinates();
-
-	/**
-	 * An entity can have multiple {@link Spatial} annotations defining
-	 * different sets of coordinates.
-	 * Each non-default Spatial instance has a name to identify it,
-	 * use this method to pick one of these non-default coordinate fields.
-	 * @param field The name of the set of coordinates to target for the query
-	 * @return
-	 */
-	SpatialMatchingContext onCoordinates(String field);
+	SpatialMatchingContext onField(String fieldName);
 
 }

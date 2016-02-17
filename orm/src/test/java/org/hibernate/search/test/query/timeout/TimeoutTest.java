@@ -1,48 +1,39 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.query.timeout;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.lucene.search.Query;
-
 import org.hibernate.QueryTimeoutException;
 import org.hibernate.Transaction;
-import org.hibernate.cfg.Configuration;
 import org.hibernate.dialect.PostgreSQLDialect;
+import org.hibernate.resource.transaction.spi.TransactionStatus;
 import org.hibernate.search.FullTextQuery;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
 import org.hibernate.search.query.dsl.QueryBuilder;
-import org.hibernate.search.test.SearchTestCase;
+import org.hibernate.search.test.SearchTestBase;
 import org.hibernate.testing.SkipForDialect;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
 
 /**
  * @author Emmanuel Bernard
  */
-public class TimeoutTest extends SearchTestCase {
+public class TimeoutTest extends SearchTestBase {
 
 	private FullTextSession fts;
 	private Query allSeikoClocksQuery;
@@ -50,6 +41,8 @@ public class TimeoutTest extends SearchTestCase {
 	private Query noMatchQuery;
 	private Query matchAllQuery;
 
+	@Override
+	@Before
 	public void setUp() throws Exception {
 		super.setUp();
 		fts = Search.getFullTextSession( openSession() );
@@ -61,10 +54,12 @@ public class TimeoutTest extends SearchTestCase {
 		storeClocks( fts );
 	}
 
+	@Override
+	@After
 	public void tearDown() throws Exception {
 		try {
 			Transaction tx = fts.getTransaction();
-			if ( !tx.isActive() ) {
+			if ( tx.getStatus() != TransactionStatus.ACTIVE ) {
 				tx = fts.beginTransaction();
 			}
 			assertEquals( 1000, fts.createQuery( "delete from " + Clock.class.getName() ).executeUpdate() );
@@ -77,6 +72,7 @@ public class TimeoutTest extends SearchTestCase {
 		}
 	}
 
+	@Test
 	public void testTimeout() {
 		Transaction tx = fts.beginTransaction();
 
@@ -88,6 +84,7 @@ public class TimeoutTest extends SearchTestCase {
 		tx.commit();
 	}
 
+	@Test
 	public void testLimitFetchingTime() {
 		Transaction tx = fts.beginTransaction();
 
@@ -112,6 +109,7 @@ public class TimeoutTest extends SearchTestCase {
 	@SkipForDialect(value = PostgreSQLDialect.class,
 			jiraKey = "JBPAPP-2945",
 			comment = "PostgreSQL driver does not implement query timeout")
+	@Test
 	public void testEnoughTime() {
 		Transaction tx = fts.beginTransaction();
 
@@ -131,10 +129,10 @@ public class TimeoutTest extends SearchTestCase {
 			hibernateQuery.scroll();
 			fail( "timeout exception should happen" );
 		}
-		catch ( QueryTimeoutException e ) {
+		catch (QueryTimeoutException e) {
 			//good
 		}
-		catch ( Exception e ) {
+		catch (Exception e) {
 			fail( "Expected a QueryTimeoutException" );
 		}
 		fts.clear();
@@ -148,10 +146,10 @@ public class TimeoutTest extends SearchTestCase {
 			hibernateQuery.iterate();
 			fail( "timeout exception should happen" );
 		}
-		catch ( QueryTimeoutException e ) {
+		catch (QueryTimeoutException e) {
 			//good
 		}
-		catch ( Exception e ) {
+		catch (Exception e) {
 			fail( "Expected a QueryTimeoutException" );
 		}
 		fts.clear();
@@ -164,10 +162,10 @@ public class TimeoutTest extends SearchTestCase {
 			hibernateQuery.list();
 			fail( "timeout exception should happen" );
 		}
-		catch ( QueryTimeoutException e ) {
+		catch (QueryTimeoutException e) {
 			//good
 		}
-		catch ( Exception e ) {
+		catch (Exception e) {
 			fail( "Expected a QueryTimeoutException" );
 		}
 		fts.clear();
@@ -223,14 +221,13 @@ public class TimeoutTest extends SearchTestCase {
 	}
 
 	@Override
-	protected Class<?>[] getAnnotatedClasses() {
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class<?>[] { Clock.class };
 	}
 
 	@Override
-	protected void configure(Configuration cfg) {
-		cfg.setProperty( "hibernate.jdbc.batch_size", "1000" );
-		super.configure( cfg );
+	public void configure(Map<String,Object> cfg) {
+		cfg.put( "hibernate.jdbc.batch_size", "1000" );
 	}
 
 }

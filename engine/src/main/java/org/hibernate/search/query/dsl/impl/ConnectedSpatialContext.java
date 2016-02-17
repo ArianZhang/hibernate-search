@@ -1,22 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.query.dsl.impl;
 
@@ -24,36 +10,30 @@ import org.apache.lucene.search.Filter;
 
 import org.hibernate.search.query.dsl.SpatialContext;
 import org.hibernate.search.query.dsl.SpatialMatchingContext;
+import org.hibernate.search.query.dsl.Unit;
+import org.hibernate.search.query.dsl.WithinContext;
 
 /**
- * @author Emmanuel Bernard <emmanuel@hibernate.org>
+ * @author Emmanuel Bernard
  */
 public class ConnectedSpatialContext implements SpatialContext {
 
 	private final QueryBuildingContext queryContext;
 	private final QueryCustomizer queryCustomizer;
 	private final SpatialQueryContext spatialContext;
-	private final ConnectedQueryBuilder queryBuilder;
 
-	public ConnectedSpatialContext(QueryBuildingContext context, ConnectedQueryBuilder queryBuilder) {
+	public ConnectedSpatialContext(QueryBuildingContext context) {
 		this.queryContext = context;
 		this.queryCustomizer = new QueryCustomizer();
 		//today we only do constant score for spatial queries
 		queryCustomizer.withConstantScore();
 		spatialContext = new SpatialQueryContext();
-		this.queryBuilder = queryBuilder;
 	}
 
 	@Override
-	public SpatialMatchingContext onCoordinates(String field) {
-		spatialContext.setCoordinatesField( field );
-		return new ConnectedSpatialMatchingContext( queryContext, queryCustomizer, spatialContext, queryBuilder );
-	}
-
-	@Override
-	public SpatialMatchingContext onDefaultCoordinates() {
-		spatialContext.setDefaultCoordinatesField();
-		return new ConnectedSpatialMatchingContext( queryContext, queryCustomizer, spatialContext, queryBuilder );
+	public SpatialMatchingContext onField(String fieldName) {
+		spatialContext.setCoordinatesField( fieldName );
+		return new ConnectedSpatialMatchingContext( queryContext, queryCustomizer, spatialContext );
 	}
 
 	@Override
@@ -72,5 +52,23 @@ public class ConnectedSpatialContext implements SpatialContext {
 	public SpatialContext filteredBy(Filter filter) {
 		queryCustomizer.filteredBy( filter );
 		return this;
+	}
+
+	@Override
+	public WithinContext within(double distance, Unit unit) {
+		spatialContext.setRadius( distance, unit );
+		return new ConnectedWithinContext( this );
+	}
+
+	QueryBuildingContext getQueryContext() {
+		return queryContext;
+	}
+
+	QueryCustomizer getQueryCustomizer() {
+		return queryCustomizer;
+	}
+
+	SpatialQueryContext getSpatialContext() {
+		return spatialContext;
 	}
 }

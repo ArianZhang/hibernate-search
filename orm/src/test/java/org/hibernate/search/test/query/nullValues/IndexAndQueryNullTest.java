@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.test.query.nullValues;
@@ -29,37 +12,42 @@ import java.util.Map;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.queryParser.ParseException;
-import org.apache.lucene.queryParser.QueryParser;
+import org.apache.lucene.queryparser.classic.ParseException;
+import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
-
 import org.hibernate.Transaction;
-import org.hibernate.cfg.Configuration;
 import org.hibernate.search.FullTextQuery;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.SearchException;
+import org.hibernate.search.exception.SearchException;
 import org.hibernate.search.query.dsl.QueryBuilder;
-import org.hibernate.search.test.SearchTestCase;
-import org.hibernate.search.test.TestConstants;
+import org.hibernate.search.test.SearchTestBase;
 import org.hibernate.search.test.query.ProjectionToMapResultTransformer;
+import org.hibernate.search.testsupport.TestConstants;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * Tests for indexing and querying {@code null} values. See HSEARCH-115
  *
  * @author Hardy Ferentschik
  */
-public class IndexAndQueryNullTest extends SearchTestCase {
+public class IndexAndQueryNullTest extends SearchTestBase {
 
+	@Test
 	public void testIndexAndSearchNull() throws Exception {
 		Value fooValue = new Value( "foo" );
 		Value nullValue = new Value( null );
 
 		FullTextSession fullTextSession = Search.getFullTextSession( openSession() );
 		Transaction tx = fullTextSession.beginTransaction();
-		session.save( fooValue );
-		session.save( nullValue );
+		getSession().save( fooValue );
+		getSession().save( nullValue );
 		tx.commit();
 
 		fullTextSession.clear();
@@ -72,12 +60,13 @@ public class IndexAndQueryNullTest extends SearchTestCase {
 		fullTextSession.close();
 	}
 
+	@Test
 	public void testLuceneDocumentContainsNullToken() throws Exception {
 		Value nullValue = new Value( null );
 
 		FullTextSession fullTextSession = Search.getFullTextSession( openSession() );
 		Transaction tx = fullTextSession.beginTransaction();
-		session.save( nullValue );
+		getSession().save( nullValue );
 		tx.commit();
 
 		fullTextSession.clear();
@@ -93,12 +82,13 @@ public class IndexAndQueryNullTest extends SearchTestCase {
 		fullTextSession.close();
 	}
 
+	@Test
 	public void testNullIndexingWithDSLQuery() throws Exception {
 		Value nullValue = new Value( null );
 
 		FullTextSession fullTextSession = Search.getFullTextSession( openSession() );
 		Transaction tx = fullTextSession.beginTransaction();
-		session.save( nullValue );
+		getSession().save( nullValue );
 		tx.commit();
 
 		fullTextSession.clear();
@@ -115,23 +105,25 @@ public class IndexAndQueryNullTest extends SearchTestCase {
 		fullTextSession.close();
 	}
 
+	@Test
 	public void testNullIndexingWithDSLQueryIgnoringFieldBridge() throws Exception {
 		try {
 			QueryBuilder queryBuilder = getSearchFactory().buildQueryBuilder().forEntity( Value.class ).get();
 			queryBuilder.keyword().onField( "value" ).ignoreFieldBridge().matching( null ).createQuery();
 			fail();
 		}
-		catch ( SearchException e ) {
+		catch (SearchException e) {
 			// success
 		}
 	}
 
+	@Test
 	public void testProjectedValueGetsConvertedToNull() throws Exception {
 		Value nullValue = new Value( null );
 
 		FullTextSession fullTextSession = Search.getFullTextSession( openSession() );
 		Transaction tx = fullTextSession.beginTransaction();
-		session.save( nullValue );
+		getSession().save( nullValue );
 		tx.commit();
 
 		fullTextSession.clear();
@@ -159,12 +151,13 @@ public class IndexAndQueryNullTest extends SearchTestCase {
 	}
 
 
+	@Test
 	public void testConfiguredDefaultNullToken() throws Exception {
 		Value nullValue = new Value( null );
 
 		FullTextSession fullTextSession = Search.getFullTextSession( openSession() );
 		Transaction tx = fullTextSession.beginTransaction();
-		session.save( nullValue );
+		getSession().save( nullValue );
 		tx.commit();
 
 		fullTextSession.clear();
@@ -181,12 +174,13 @@ public class IndexAndQueryNullTest extends SearchTestCase {
 		fullTextSession.close();
 	}
 
+	@Test
 	public void testNullIndexingWithCustomFieldBridge() throws Exception {
 		Value nullValue = new Value( null );
 
 		FullTextSession fullTextSession = Search.getFullTextSession( openSession() );
 		Transaction tx = fullTextSession.beginTransaction();
-		session.save( nullValue );
+		getSession().save( nullValue );
 		tx.commit();
 
 		fullTextSession.clear();
@@ -227,7 +221,7 @@ public class IndexAndQueryNullTest extends SearchTestCase {
 	}
 
 	private Query createLuceneQuery() throws ParseException {
-		QueryParser parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "id", TestConstants.standardAnalyzer );
+		QueryParser parser = new QueryParser( "id", TestConstants.standardAnalyzer );
 		parser.setAllowLeadingWildcard( true );
 		return parser.parse( "*" );
 	}
@@ -246,12 +240,13 @@ public class IndexAndQueryNullTest extends SearchTestCase {
 		assertEquals( "Wrong number of results", expectedNumberOfResults, valueList.size() );
 	}
 
-	protected void configure(Configuration cfg) {
-		super.configure( cfg );
-		cfg.setProperty( "hibernate.search.default_null_token", "fubar" );
+	@Override
+	public void configure(Map<String,Object> cfg) {
+		cfg.put( "hibernate.search.default_null_token", "fubar" );
 	}
 
-	protected Class<?>[] getAnnotatedClasses() {
+	@Override
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] {
 				Value.class,
 		};

@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.util.impl;
 
@@ -32,7 +15,7 @@ import java.lang.ref.SoftReference;
  * Cache following a "Most Recently Used" (MRU) algorithm for maintaining a
  * bounded in-memory size; the "Least Recently Used" (LRU) entry is the first
  * available for removal from the cache.
- * <p/>
+ * <p>
  * This implementation uses a "soft limit" to the in-memory size of the cache,
  * meaning that all cache entries are kept within a completely
  * {@link java.lang.ref.SoftReference}-based map with the most recently utilized
@@ -41,7 +24,7 @@ import java.lang.ref.SoftReference;
  * the actual size of this cache impl can actually grow beyond the stated max
  * size bound as long as GC is not actively seeking soft references for
  * enqueuement.
- * <p/>
+ * <p>
  * The soft-size is bounded and configurable. This allows controlling memory
  * usage which can grow out of control under some circumstances, especially when
  * very large heaps are in use. Although memory usage per se should not be a
@@ -54,12 +37,9 @@ import java.lang.ref.SoftReference;
  * one for each collection/array size passed to the IN clause. Many slightly
  * different queries will eventually fill the heap and trigger a full GC to
  * reclaim space, leading to unacceptable pauses in some cases.
- * <p/>
+ * <p>
  * <strong>Note:</strong> This class is serializable, however all entries are
  * discarded on serialization.
- *
- * @see org.hibernate.cfg.Environment#QUERY_PLAN_CACHE_MAX_STRONG_REFERENCES
- * @see org.hibernate.cfg.Environment#QUERY_PLAN_CACHE_MAX_SOFT_REFERENCES
  *
  * @author Steve Ebersole
  * @author Manuel Dominguez Sarmiento

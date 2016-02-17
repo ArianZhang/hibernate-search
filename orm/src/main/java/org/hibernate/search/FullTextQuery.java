@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search;
 
@@ -31,6 +14,9 @@ import org.apache.lucene.search.Sort;
 
 import org.hibernate.Criteria;
 import org.hibernate.Query;
+
+import org.hibernate.search.engine.ProjectionConstants;
+import org.hibernate.search.filter.FullTextFilter;
 import org.hibernate.search.query.DatabaseRetrievalMethod;
 import org.hibernate.search.query.ObjectLookupMethod;
 import org.hibernate.search.query.engine.spi.FacetManager;
@@ -69,7 +55,7 @@ public interface FullTextQuery extends Query, ProjectionConstants {
 
 	/**
 	 * @return the number of hits for this search.
-	 *         <p/>
+	 *         <p>
 	 *         Caution:
 	 *         The number of results might be slightly different from
 	 *         <code>list().size()</code> because list() if the index is
@@ -80,11 +66,10 @@ public interface FullTextQuery extends Query, ProjectionConstants {
 	/**
 	 * Defines the Database Query used to load the Lucene results.
 	 * Useful to load a given object graph by refining the fetch modes.
-	 * <p>
 	 * <ul>
-	 * <li>No projection (criteria.setProjection() ) allowed, the root entity must be the only returned type</li>
+	 * <li>No projection ({@code criteria.setProjection()}) allowed, the root entity must be the only returned type</li>
 	 * <li>No where restriction can be defined either</li>
-	 * </p>
+	 * </ul>
 	 *
 	 * @param criteria Hibernate criteria query used to load results
 	 *
@@ -96,10 +81,10 @@ public interface FullTextQuery extends Query, ProjectionConstants {
 	 * Defines the Lucene field names projected and returned in a query result
 	 * Each field is converted back to it's object representation, an Object[] being returned for each "row"
 	 * (similar to an HQL or a Criteria API projection).
-	 * <p/>
+	 * <p>
 	 * A projectable field must be stored in the Lucene index and use a {@link org.hibernate.search.bridge.TwoWayFieldBridge}
 	 * Unless notified in their JavaDoc, all built-in bridges are two-way. All @DocumentId fields are projectable by design.
-	 * <p/>
+	 * <p>
 	 * If the projected field is not a projectable field, null is returned in the object[]
 	 *
 	 * @param fields list of field names to project on
@@ -134,7 +119,7 @@ public interface FullTextQuery extends Query, ProjectionConstants {
 	 *
 	 * @param name the name of the filter to enable
 	 * @return Returns a {@code FullTextFilter} object that allows filter parameter injection
-	 * @throws SearchException in case the filter with the specified name is not defined
+	 * @throws org.hibernate.search.exception.SearchException in case the filter with the specified name is not defined
 	 */
 	FullTextFilter enableFullTextFilter(String name);
 
@@ -164,24 +149,29 @@ public interface FullTextQuery extends Query, ProjectionConstants {
 	/**
 	 * {@link Query#setFirstResult}
 	 */
+	@Override
 	FullTextQuery setFirstResult(int firstResult);
 
 	/**
 	 * {@link Query#setMaxResults}
 	 */
+	@Override
 	FullTextQuery setMaxResults(int maxResults);
 
 	/**
 	 * Defines scrollable result fetch size as well as the JDBC fetch size
 	 */
+	@Override
 	FullTextQuery setFetchSize(int i);
 
 	/**
 	 * defines a result transformer used during projection, the Aliases provided are the projection aliases.
 	 */
+	@Override
 	FullTextQuery setResultTransformer(ResultTransformer transformer);
 
 	/**
+	 * @param <T> the type of the unwrapped object
 	 * @param type the type to unwrap
 	 *
 	 * @return the underlying type if possible. If not possible to unwrap to the given type an
@@ -241,6 +231,10 @@ public interface FullTextQuery extends Query, ProjectionConstants {
 	 * The database retrieval method defines how objects are loaded from the database. Defaults to QUERY.
 	 *
 	 * Note that Hibernate Search can deviate from these choices when it makes sense.
+	 *
+	 * @param lookupMethod the lookuip strategy
+	 * @param retrievalMethod the retrieval strategy
+	 * @return {@code this} to allow method chaining
 	 */
 	FullTextQuery initializeObjectsWith(ObjectLookupMethod lookupMethod, DatabaseRetrievalMethod retrievalMethod);
 }

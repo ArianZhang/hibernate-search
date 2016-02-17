@@ -1,29 +1,11 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010-2011, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.query.hibernate.impl;
 
-import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
@@ -33,9 +15,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.Sort;
-
 import org.hibernate.Criteria;
-import org.hibernate.HibernateException;
 import org.hibernate.LockMode;
 import org.hibernate.LockOptions;
 import org.hibernate.Query;
@@ -43,23 +23,24 @@ import org.hibernate.QueryTimeoutException;
 import org.hibernate.ScrollMode;
 import org.hibernate.ScrollableResults;
 import org.hibernate.Session;
-import org.hibernate.engine.spi.SessionImplementor;
 import org.hibernate.engine.query.spi.ParameterMetadata;
+import org.hibernate.engine.spi.SessionImplementor;
 import org.hibernate.internal.AbstractQueryImpl;
-import org.hibernate.search.FullTextFilter;
 import org.hibernate.search.FullTextQuery;
-import org.hibernate.search.engine.spi.SearchFactoryImplementor;
+import org.hibernate.search.engine.integration.impl.ExtendedSearchIntegrator;
+import org.hibernate.search.filter.FullTextFilter;
+import org.hibernate.search.hcore.util.impl.ContextHelper;
 import org.hibernate.search.query.DatabaseRetrievalMethod;
 import org.hibernate.search.query.ObjectLookupMethod;
 import org.hibernate.search.query.engine.spi.DocumentExtractor;
 import org.hibernate.search.query.engine.spi.EntityInfo;
+import org.hibernate.search.query.engine.spi.FacetManager;
 import org.hibernate.search.query.engine.spi.HSQuery;
+import org.hibernate.search.query.engine.spi.QueryDescriptor;
 import org.hibernate.search.query.engine.spi.TimeoutExceptionFactory;
 import org.hibernate.search.query.engine.spi.TimeoutManager;
-import org.hibernate.search.query.engine.spi.FacetManager;
 import org.hibernate.search.spatial.Coordinates;
 import org.hibernate.search.spatial.impl.Point;
-import org.hibernate.search.util.impl.ContextHelper;
 import org.hibernate.search.util.logging.impl.Log;
 import org.hibernate.search.util.logging.impl.LoggerFactory;
 import org.hibernate.transform.ResultTransformer;
@@ -67,50 +48,55 @@ import org.hibernate.transform.ResultTransformer;
 /**
  * Implementation of {@link org.hibernate.search.FullTextQuery}.
  *
- * @author Emmanuel Bernard <emmanuel@hibernate.org>
- * @author Hardy Ferentschik <hardy@hibernate.org>
+ * @author Emmanuel Bernard
+ * @author Hardy Ferentschik
  */
 public class FullTextQueryImpl extends AbstractQueryImpl implements FullTextQuery {
 
 	private static final Log log = LoggerFactory.make();
+
+	private ObjectLookupMethod objectLookupMethod;
+	private DatabaseRetrievalMethod databaseRetrievalMethod;
+
 	private Criteria criteria;
 	private ResultTransformer resultTransformer;
 	private int fetchSize = 1;
-	private ObjectLookupMethod lookupMethod = ObjectLookupMethod.SKIP; //default
-	private DatabaseRetrievalMethod retrievalMethod = DatabaseRetrievalMethod.QUERY; //default
 	private final HSQuery hSearchQuery;
+
 
 	/**
 	 * Constructs a  <code>FullTextQueryImpl</code> instance.
 	 *
-	 * @param query The Lucene query.
+	 * @param query The query.
 	 * @param classes Array of classes (must be immutable) used to filter the results to the given class types.
 	 * @param session Access to the Hibernate session.
 	 * @param parameterMetadata Additional query metadata.
 	 */
-	public FullTextQueryImpl(org.apache.lucene.search.Query query, Class<?>[] classes, SessionImplementor session,
-							ParameterMetadata parameterMetadata) {
+	public FullTextQueryImpl(QueryDescriptor query,
+			Class<?>[] classes,
+			SessionImplementor session,
+			ParameterMetadata parameterMetadata) {
 		//TODO handle flushMode
 		super( query.toString(), null, session, parameterMetadata );
-		//TODO get a factory on searchFactoryImplementor
-		hSearchQuery = getSearchFactoryImplementor().createHSQuery();
+
+		ExtendedSearchIntegrator extendedIntegrator = getExtendedSearchIntegrator();
+		this.objectLookupMethod = extendedIntegrator.getDefaultObjectLookupMethod();
+		this.databaseRetrievalMethod = extendedIntegrator.getDefaultDatabaseRetrievalMethod();
+
+		hSearchQuery = query.createHSQuery( extendedIntegrator );
 		hSearchQuery
-				.luceneQuery( query )
 				.timeoutExceptionFactory( exceptionFactory )
+				.tenantIdentifier( session.getTenantIdentifier() )
 				.targetedEntities( Arrays.asList( classes ) );
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
+	@Override
 	public FullTextQuery setSort(Sort sort) {
 		hSearchQuery.sort( sort );
 		return this;
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
+	@Override
 	public FullTextQuery setFilter(Filter filter) {
 		hSearchQuery.filter( filter );
 		return this;
@@ -120,7 +106,8 @@ public class FullTextQueryImpl extends AbstractQueryImpl implements FullTextQuer
 	 * Return an iterator on the results.
 	 * Retrieve the object one by one (initialize it during the next() operation)
 	 */
-	public Iterator iterate() throws HibernateException {
+	@Override
+	public Iterator iterate() {
 		//implement an iterator which keep the id/class for each hit and get the object on demand
 		//cause I can't keep the searcher and hence the hit opened. I don't have any hook to know when the
 		//user stops using it
@@ -130,7 +117,7 @@ public class FullTextQueryImpl extends AbstractQueryImpl implements FullTextQuer
 		final List<EntityInfo> entityInfos = hSearchQuery.queryEntityInfos();
 		//stop timeout manager, the iterator pace is in the user's hands
 		hSearchQuery.getTimeoutManager().stop();
-		//TODO is this noloader optimization really needed?
+		//TODO is this no-loader optimization really needed?
 		final Iterator<Object> iterator;
 		if ( entityInfos.size() == 0 ) {
 			iterator = new IteratorImpl( entityInfos, noLoader );
@@ -159,10 +146,10 @@ public class FullTextQueryImpl extends AbstractQueryImpl implements FullTextQuer
 				.targetedEntities( hSearchQuery.getTargetedEntities() )
 				.indexedTargetedEntities( hSearchQuery.getIndexedTargetedEntities() )
 				.session( session )
-				.searchFactory( hSearchQuery.getSearchFactoryImplementor() )
+				.searchFactory( hSearchQuery.getExtendedSearchIntegrator() )
 				.timeoutManager( hSearchQuery.getTimeoutManager() )
-				.lookupMethod( lookupMethod )
-				.retrievalMethod( retrievalMethod );
+				.lookupMethod( objectLookupMethod )
+				.retrievalMethod( databaseRetrievalMethod );
 		if ( hSearchQuery.getProjectedFields() != null ) {
 			return getProjectionLoader( loaderBuilder );
 		}
@@ -175,7 +162,7 @@ public class FullTextQueryImpl extends AbstractQueryImpl implements FullTextQuer
 		ProjectionLoader loader = new ProjectionLoader();
 		loader.init(
 				(Session) session,
-				hSearchQuery.getSearchFactoryImplementor(),
+				hSearchQuery.getExtendedSearchIntegrator(),
 				resultTransformer,
 				loaderBuilder,
 				hSearchQuery.getProjectedFields(),
@@ -184,7 +171,8 @@ public class FullTextQueryImpl extends AbstractQueryImpl implements FullTextQuer
 		return loader;
 	}
 
-	public ScrollableResults scroll() throws HibernateException {
+	@Override
+	public ScrollableResults scroll() {
 		//keep the searcher open until the resultset is closed
 
 		hSearchQuery.getTimeoutManager().start();
@@ -200,12 +188,14 @@ public class FullTextQueryImpl extends AbstractQueryImpl implements FullTextQuer
 		);
 	}
 
-	public ScrollableResults scroll(ScrollMode scrollMode) throws HibernateException {
+	@Override
+	public ScrollableResults scroll(ScrollMode scrollMode) {
 		//TODO think about this scrollmode
 		return scroll();
 	}
 
-	public List list() throws HibernateException {
+	@Override
+	public List list() {
 		hSearchQuery.getTimeoutManager().start();
 		final List<EntityInfo> entityInfos = hSearchQuery.queryEntityInfos();
 		Loader loader = getLoader();
@@ -222,10 +212,12 @@ public class FullTextQueryImpl extends AbstractQueryImpl implements FullTextQuer
 		return list;
 	}
 
+	@Override
 	public Explanation explain(int documentId) {
 		return hSearchQuery.explain( documentId );
 	}
 
+	@Override
 	public int getResultSize() {
 		if ( getLoader().isSizeSafe() ) {
 			return hSearchQuery.queryResultSize();
@@ -235,11 +227,13 @@ public class FullTextQueryImpl extends AbstractQueryImpl implements FullTextQuer
 		}
 	}
 
+	@Override
 	public FullTextQuery setCriteriaQuery(Criteria criteria) {
 		this.criteria = criteria;
 		return this;
 	}
 
+	@Override
 	public FullTextQuery setProjection(String... fields) {
 		hSearchQuery.projection( fields );
 		return this;
@@ -257,17 +251,19 @@ public class FullTextQueryImpl extends AbstractQueryImpl implements FullTextQuer
 		return this;
 	}
 
-
+	@Override
 	public FullTextQuery setFirstResult(int firstResult) {
 		hSearchQuery.firstResult( firstResult );
 		return this;
 	}
 
+	@Override
 	public FullTextQuery setMaxResults(int maxResults) {
 		hSearchQuery.maxResults( maxResults );
 		return this;
 	}
 
+	@Override
 	public FullTextQuery setFetchSize(int fetchSize) {
 		super.setFetchSize( fetchSize );
 		if ( fetchSize <= 0 ) {
@@ -277,6 +273,7 @@ public class FullTextQueryImpl extends AbstractQueryImpl implements FullTextQuer
 		return this;
 	}
 
+	@Override
 	public Query setLockOptions(LockOptions lockOptions) {
 		throw new UnsupportedOperationException( "Lock options are not implemented in Hibernate Search queries" );
 	}
@@ -288,6 +285,7 @@ public class FullTextQueryImpl extends AbstractQueryImpl implements FullTextQuer
 		return this;
 	}
 
+	@Override
 	@SuppressWarnings("unchecked")
 	public <T> T unwrap(Class<T> type) {
 		if ( type == org.apache.lucene.search.Query.class ) {
@@ -296,14 +294,17 @@ public class FullTextQueryImpl extends AbstractQueryImpl implements FullTextQuer
 		throw new IllegalArgumentException( "Cannot unwrap " + type.getName() );
 	}
 
+	@Override
 	public LockOptions getLockOptions() {
 		throw new UnsupportedOperationException( "Lock options are not implemented in Hibernate Search queries" );
 	}
 
-	public int executeUpdate() throws HibernateException {
+	@Override
+	public int executeUpdate() {
 		throw new UnsupportedOperationException( "executeUpdate is not supported in Hibernate Search queries" );
 	}
 
+	@Override
 	public Query setLockMode(String alias, LockMode lockMode) {
 		throw new UnsupportedOperationException( "Lock options are not implemented in Hibernate Search queries" );
 	}
@@ -312,14 +313,17 @@ public class FullTextQueryImpl extends AbstractQueryImpl implements FullTextQuer
 		throw new UnsupportedOperationException( "Lock options are not implemented in Hibernate Search queries" );
 	}
 
+	@Override
 	public FullTextFilter enableFullTextFilter(String name) {
 		return hSearchQuery.enableFullTextFilter( name );
 	}
 
+	@Override
 	public void disableFullTextFilter(String name) {
 		hSearchQuery.disableFullTextFilter( name );
 	}
 
+	@Override
 	public FacetManager getFacetManager() {
 		return hSearchQuery.getFacetManager();
 	}
@@ -329,6 +333,7 @@ public class FullTextQueryImpl extends AbstractQueryImpl implements FullTextQuer
 		return setTimeout( timeout, TimeUnit.SECONDS );
 	}
 
+	@Override
 	public FullTextQuery setTimeout(long timeout, TimeUnit timeUnit) {
 		super.setTimeout( (int) timeUnit.toSeconds( timeout ) );
 		hSearchQuery.getTimeoutManager().setTimeout( timeout, timeUnit );
@@ -336,41 +341,48 @@ public class FullTextQueryImpl extends AbstractQueryImpl implements FullTextQuer
 		return this;
 	}
 
+	@Override
 	public FullTextQuery limitExecutionTimeTo(long timeout, TimeUnit timeUnit) {
 		hSearchQuery.getTimeoutManager().setTimeout( timeout, timeUnit );
 		hSearchQuery.getTimeoutManager().limitFetchingOnTimeout();
 		return this;
 	}
 
+	@Override
 	public boolean hasPartialResults() {
 		return hSearchQuery.getTimeoutManager().hasPartialResults();
 	}
 
+	@Override
 	public FullTextQuery initializeObjectsWith(ObjectLookupMethod lookupMethod, DatabaseRetrievalMethod retrievalMethod) {
-		this.lookupMethod = lookupMethod;
-		this.retrievalMethod = retrievalMethod;
+		this.objectLookupMethod = lookupMethod;
+		this.databaseRetrievalMethod = retrievalMethod;
 		return this;
 	}
 
-	private SearchFactoryImplementor getSearchFactoryImplementor() {
-		return ContextHelper.getSearchFactoryBySessionImplementor( session );
+	private ExtendedSearchIntegrator getExtendedSearchIntegrator() {
+		return ContextHelper.getSearchintegratorBySessionImplementor( session );
 	}
 
 	private static final Loader noLoader = new Loader() {
+		@Override
 		public void init(Session session,
-						SearchFactoryImplementor searchFactoryImplementor,
-						ObjectsInitializer objectsInitializer,
+						ExtendedSearchIntegrator extendedIntegrator,
+						ObjectInitializer objectInitializer,
 						TimeoutManager timeoutManager) {
 		}
 
+		@Override
 		public Object load(EntityInfo entityInfo) {
 			throw new UnsupportedOperationException( "noLoader should not be used" );
 		}
 
+		@Override
 		public Object loadWithoutTiming(EntityInfo entityInfo) {
 			throw new UnsupportedOperationException( "noLoader should not be used" );
 		}
 
+		@Override
 		public List load(EntityInfo... entityInfos) {
 			throw new UnsupportedOperationException( "noLoader should not be used" );
 		}
@@ -383,8 +395,9 @@ public class FullTextQueryImpl extends AbstractQueryImpl implements FullTextQuer
 
 	private static final TimeoutExceptionFactory exceptionFactory = new TimeoutExceptionFactory() {
 
-		public RuntimeException createTimeoutException(String message, org.apache.lucene.search.Query luceneQuery) {
-			return new QueryTimeoutException( message, (SQLException) null, luceneQuery.toString() );
+		@Override
+		public RuntimeException createTimeoutException(String message, String queryDescription) {
+			return new QueryTimeoutException( message, null, queryDescription );
 		}
 
 	};

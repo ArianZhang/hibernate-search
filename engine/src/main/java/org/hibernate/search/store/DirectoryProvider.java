@@ -1,33 +1,15 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.store;
 
 import java.util.Properties;
 
 import org.apache.lucene.store.Directory;
-
-import org.hibernate.search.indexes.impl.DirectoryBasedIndexManager;
+import org.hibernate.search.indexes.spi.DirectoryBasedIndexManager;
 import org.hibernate.search.spi.BuildContext;
 
 /**
@@ -40,22 +22,24 @@ import org.hibernate.search.spi.BuildContext;
  *
  * @author Emmanuel Bernard
  * @author Sylvain Vieujot
+ * @param <TDirectory> a Lucene Directory provider
  */
 public interface DirectoryProvider<TDirectory extends Directory> {
 
 	/**
-	 * @param directoryProviderName
-	 * @param properties
-	 * @param context
-	 *
 	 * get the information to initialize the directory and build its hashCode/equals method
+	 *
+	 * @param indexName the name of the index (directory) to create
+	 * @param properties the configuration properties
+	 * @param context provide access to some services at initialization
 	 */
-	void initialize(String directoryProviderName, Properties properties, BuildContext context);
+	void initialize(String indexName, Properties properties, BuildContext context);
 
 	/**
 	 * Executed after initialize, this method set up the heavy process of starting up the DirectoryProvider
 	 * IO processing as well as background processing are expected to be set up here
 	 *
+	 * @param indexManager the index manager
 	 */
 	void start(DirectoryBasedIndexManager indexManager);
 
@@ -67,7 +51,10 @@ public interface DirectoryProvider<TDirectory extends Directory> {
 	void stop();
 
 	/**
-	 * Returns an initialized Lucene Directory. This method call <b>must</b> be threadsafe
+	 * Give access to the initialized Lucene Directory.
+	 * This method call <b>must</b> be threadsafe.
+	 *
+	 * @return an initialized Lucene Directory
 	 */
 	TDirectory getDirectory();
 }

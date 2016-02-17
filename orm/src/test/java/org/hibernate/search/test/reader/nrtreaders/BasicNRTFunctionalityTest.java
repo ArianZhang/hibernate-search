@@ -1,67 +1,58 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.reader.nrtreaders;
 
 import java.util.List;
+import java.util.Map;
 
+import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.hibernate.Session;
-import org.hibernate.cfg.Configuration;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
-import org.hibernate.search.Environment;
+import org.hibernate.search.cfg.Environment;
 import org.hibernate.search.FullTextQuery;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.engine.spi.SearchFactoryImplementor;
+import org.hibernate.search.engine.integration.impl.ExtendedSearchIntegrator;
 import org.hibernate.search.exception.ErrorHandler;
 import org.hibernate.search.indexes.impl.NRTIndexManager;
 import org.hibernate.search.indexes.spi.IndexManager;
 import org.hibernate.search.query.dsl.QueryBuilder;
 import org.hibernate.search.test.AlternateDocument;
 import org.hibernate.search.test.Document;
-import org.hibernate.search.test.SearchTestCase;
+import org.hibernate.search.test.SearchTestBase;
 import org.hibernate.search.test.errorhandling.MockErrorHandler;
-import org.hibernate.search.util.impl.ContextHelper;
+import org.hibernate.search.hcore.util.impl.ContextHelper;
 import org.junit.Assert;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
 
 /**
  * Strongly inspired to RamDirectoryTest, verifies the searchability of unflushed
  * modifications on an NRT IndexManager.
  * Implicitly verifies that the NRTIndexManager is setup as configured.
  *
- * @author Sanne Grinovero <sanne@hibernate.org> (C) 2011 Red Hat Inc.
+ * @author Sanne Grinovero (C) 2011 Red Hat Inc.
  */
-public class BasicNRTFunctionalityTest extends SearchTestCase {
+public class BasicNRTFunctionalityTest extends SearchTestBase {
 
 	/**
 	 * Verify it's safe to not skip deletes even when a new entity
 	 * is stored reusing a stale documentId.
 	 */
+	@Test
 	public void testEntityResurrection() {
 		final Long id = 5l;
-		Session session = getSessions().openSession();
+		Session session = getSessionFactory().openSession();
 		session.getTransaction().begin();
 
 		AlternateDocument docOnInfinispan = new AlternateDocument( id, "On Infinispan", "a book about Infinispan", "content" );
@@ -99,14 +90,15 @@ public class BasicNRTFunctionalityTest extends SearchTestCase {
 		session.close();
 	}
 
+	@Test
 	public void testMultipleEntitiesPerIndex() throws Exception {
-		SearchFactoryImplementor searchFactoryBySFI = ContextHelper.getSearchFactoryBySFI( (SessionFactoryImplementor) getSessions() );
-		IndexManager documentsIndexManager = searchFactoryBySFI.getIndexManagerHolder().getIndexManager( "Documents" );
+		ExtendedSearchIntegrator integrator = ContextHelper.getSearchintegratorBySFI( (SessionFactoryImplementor) getSessionFactory() );
+		IndexManager documentsIndexManager = integrator.getIndexManagerHolder().getIndexManager( "Documents" );
 		Assert.assertNotNull( documentsIndexManager );
 		Assert.assertTrue( documentsIndexManager.getClass().equals( org.hibernate.search.indexes.impl.NRTIndexManager.class ) );
 		NRTIndexManager indexManager = (NRTIndexManager) documentsIndexManager;
 
-		Session s = getSessions().openSession();
+		Session s = getSessionFactory().openSession();
 		s.getTransaction().begin();
 		Document document =
 				new Document( "Hibernate in Action", "Object/relational mapping with Hibernate", "blah blah blah" );
@@ -126,7 +118,7 @@ public class BasicNRTFunctionalityTest extends SearchTestCase {
 		assertEquals( 0, getDocumentNbrFromFilesystem( indexManager ) );
 		assertEquals( 2, getDocumentNbrFromReaderProvider( indexManager ) );
 
-		s = getSessions().openSession();
+		s = getSessionFactory().openSession();
 		s.getTransaction().begin();
 		TermQuery q = new TermQuery( new Term( "alt_title", "hibernate" ) );
 		assertEquals(
@@ -143,7 +135,7 @@ public class BasicNRTFunctionalityTest extends SearchTestCase {
 		s.getTransaction().commit();
 		s.close();
 
-		s = getSessions().openSession();
+		s = getSessionFactory().openSession();
 		s.getTransaction().begin();
 
 		assertEquals( 0, getDocumentNbrFromFilesystem( indexManager ) ); //filesystem only sees changes from a fully closed IW
@@ -154,7 +146,7 @@ public class BasicNRTFunctionalityTest extends SearchTestCase {
 		s.getTransaction().commit();
 		s.close();
 
-		s = getSessions().openSession();
+		s = getSessionFactory().openSession();
 		s.getTransaction().begin();
 
 		assertEquals( 0, getDocumentNbrFromFilesystem( indexManager ) );
@@ -164,7 +156,7 @@ public class BasicNRTFunctionalityTest extends SearchTestCase {
 		s.getTransaction().commit();
 		s.close();
 
-		ErrorHandler errorHandler = searchFactoryBySFI.getErrorHandler();
+		ErrorHandler errorHandler = integrator.getErrorHandler();
 		Assert.assertTrue( errorHandler instanceof MockErrorHandler );
 		MockErrorHandler mockErrorHandler = (MockErrorHandler)errorHandler;
 		Assert.assertNull( "Errors detected in the backend!", mockErrorHandler.getLastException() );
@@ -187,7 +179,7 @@ public class BasicNRTFunctionalityTest extends SearchTestCase {
 	}
 
 	private int getDocumentNbrFromFilesystem(NRTIndexManager documentsIndexManager) throws Exception {
-		IndexReader reader = IndexReader.open( documentsIndexManager.getDirectoryProvider().getDirectory(), true );
+		IndexReader reader = DirectoryReader.open( documentsIndexManager.getDirectoryProvider().getDirectory() );
 		try {
 			return reader.numDocs();
 		}
@@ -196,17 +188,18 @@ public class BasicNRTFunctionalityTest extends SearchTestCase {
 		}
 	}
 
-	protected Class<?>[] getAnnotatedClasses() {
+	@Override
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] {
 				Document.class,
 				AlternateDocument.class
 		};
 	}
 
-	protected void configure(Configuration cfg) {
-		super.configure( cfg );
-		cfg.setProperty( "hibernate.search.default.indexmanager", "near-real-time" );
-		cfg.setProperty( Environment.ERROR_HANDLER, MockErrorHandler.class.getName() );
+	@Override
+	public void configure(Map<String,Object> cfg) {
+		cfg.put( "hibernate.search.default.indexmanager", "near-real-time" );
+		cfg.put( Environment.ERROR_HANDLER, MockErrorHandler.class.getName() );
 	}
 
 }

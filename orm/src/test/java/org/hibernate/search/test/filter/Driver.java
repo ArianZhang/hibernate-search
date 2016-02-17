@@ -1,29 +1,13 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.filter;
 
 import java.util.Date;
+
 import javax.persistence.Entity;
 import javax.persistence.Id;
 
@@ -31,11 +15,13 @@ import org.hibernate.search.annotations.Analyze;
 import org.hibernate.search.annotations.DateBridge;
 import org.hibernate.search.annotations.DocumentId;
 import org.hibernate.search.annotations.Field;
+import org.hibernate.search.annotations.FieldBridge;
 import org.hibernate.search.annotations.FilterCacheModeType;
 import org.hibernate.search.annotations.FullTextFilterDef;
 import org.hibernate.search.annotations.FullTextFilterDefs;
 import org.hibernate.search.annotations.Indexed;
 import org.hibernate.search.annotations.Resolution;
+import org.hibernate.search.bridge.builtin.IntegerBridge;
 
 /**
  * @author Emmanuel Bernard
@@ -49,10 +35,13 @@ import org.hibernate.search.annotations.Resolution;
 				impl = SecurityFilterFactory.class,
 				cache = FilterCacheModeType.INSTANCE_AND_DOCIDSETRESULTS),
 		@FullTextFilterDef(name = "fieldConstraintFilter-1",
-				impl = FieldConstraintFilter.class,
+				impl = FieldConstraintFilterFactory.class,
 				cache = FilterCacheModeType.INSTANCE_AND_DOCIDSETRESULTS),
 		@FullTextFilterDef(name = "fieldConstraintFilter-2",
-				impl = FieldConstraintFilter.class,
+				impl = FieldConstraintFilterFactory.class,
+				cache = FilterCacheModeType.INSTANCE_AND_DOCIDSETRESULTS),
+		@FullTextFilterDef(name = "cacheinstancewithoutkeymethodtest",
+				impl = FieldConstraintFilterWithoutKeyMethod.class,
 				cache = FilterCacheModeType.INSTANCE_AND_DOCIDSETRESULTS),
 		//Filter factory with parameters
 		@FullTextFilterDef(name = "cacheresultstest",
@@ -61,20 +50,31 @@ import org.hibernate.search.annotations.Resolution;
 		@FullTextFilterDef(name = "cacheinstancetest",
 				impl = InstanceBasedExcludeAllFilter.class,
 				cache = FilterCacheModeType.INSTANCE_ONLY),
+		@FullTextFilterDef(name = "cacheinstancefromfactorywithoutkeymethodtest",
+				impl = FieldConstraintFilterFactoryWithoutKeyMethod.class,
+				cache = FilterCacheModeType.INSTANCE_ONLY),
 		@FullTextFilterDef(name = "empty",
 				impl = NullReturningEmptyFilter.class,
-				cache = FilterCacheModeType.INSTANCE_ONLY)
+				cache = FilterCacheModeType.INSTANCE_ONLY),
+		@FullTextFilterDef(name = "cached_empty",
+				impl = NullReturningEmptyFilter.class,
+				cache = FilterCacheModeType.INSTANCE_AND_DOCIDSETRESULTS)
 })
 public class Driver {
 	@Id
 	@DocumentId
 	private int id;
+
 	@Field(analyze = Analyze.YES)
 	private String name;
+
 	@Field(analyze = Analyze.NO)
 	private String teacher;
+
 	@Field(analyze = Analyze.NO)
+	@FieldBridge(impl = IntegerBridge.class)
 	private int score;
+
 	@Field(analyze = Analyze.NO)
 	@DateBridge(resolution = Resolution.YEAR)
 	private Date delivery;
@@ -119,6 +119,7 @@ public class Driver {
 		this.delivery = delivery;
 	}
 
+	@Override
 	public boolean equals(Object o) {
 		if ( this == o ) {
 			return true;
@@ -145,6 +146,7 @@ public class Driver {
 
 	}
 
+	@Override
 	public int hashCode() {
 		int result;
 		result = id;

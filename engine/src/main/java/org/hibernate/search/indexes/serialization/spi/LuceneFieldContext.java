@@ -1,22 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.indexes.serialization.spi;
 
@@ -24,21 +10,29 @@ import java.io.Reader;
 import java.io.Serializable;
 
 import org.apache.lucene.document.Field;
-import org.apache.lucene.index.FieldInfo.IndexOptions;
-
-import org.hibernate.annotations.common.AssertionFailure;
-import org.hibernate.search.SearchException;
+import org.apache.lucene.document.FieldType;
+import org.apache.lucene.index.DocValuesType;
+import org.apache.lucene.index.IndexOptions;
+import org.apache.lucene.util.BytesRef;
+import org.hibernate.search.exception.AssertionFailure;
+import org.hibernate.search.exception.SearchException;
 import org.hibernate.search.indexes.serialization.impl.CopyTokenStream;
 import org.hibernate.search.indexes.serialization.impl.SerializationHelper;
+import org.hibernate.search.util.logging.impl.Log;
+import org.hibernate.search.util.logging.impl.LoggerFactory;
 
 /**
- * @author Emmanuel Bernard <emmanuel@hibernate.org>
+ * @author Emmanuel Bernard &lt;emmanuel@hibernate.org&gt;
  */
-public class LuceneFieldContext {
-	private Field field;
+public final class LuceneFieldContext {
+	private static Log log = LoggerFactory.make();
+
+	private final Field field;
+	private final FieldType fieldType;
 
 	public LuceneFieldContext(Field field) {
 		this.field = field;
+		fieldType = field.fieldType();
 	}
 
 	public String getName() {
@@ -46,11 +40,11 @@ public class LuceneFieldContext {
 	}
 
 	public SerializableStore getStore() {
-		return field.isStored() ? SerializableStore.YES : SerializableStore.NO;
+		return fieldType.stored() ? SerializableStore.YES : SerializableStore.NO;
 	}
 
 	public SerializableIndex getIndex() {
-		Field.Index index = Field.Index.toIndex( field.isIndexed(), field.isTokenized(), field.getOmitNorms() );
+		Field.Index index = Field.Index.toIndex( fieldType.indexOptions() != IndexOptions.NONE , fieldType.tokenized(), fieldType.omitNorms() );
 		switch ( index ) {
 			case ANALYZED:
 				return SerializableIndex.ANALYZED;
@@ -68,7 +62,7 @@ public class LuceneFieldContext {
 	}
 
 	public SerializableTermVector getTermVector() {
-		Field.TermVector vector = Field.TermVector.toTermVector( field.isTermVectorStored(), field.isStoreOffsetWithTermVector(), field.isStorePositionWithTermVector() );
+		Field.TermVector vector = Field.TermVector.toTermVector( fieldType.storeTermVectors(), fieldType.storeTermVectorOffsets(), fieldType.storeTermVectorPositions() );
 		switch ( vector ) {
 			case NO:
 				return SerializableTermVector.NO;
@@ -85,16 +79,44 @@ public class LuceneFieldContext {
 		}
 	}
 
+	public SerializableDocValuesType getDocValuesType() {
+		DocValuesType docValuesType = field.fieldType().docValuesType();
+		switch ( docValuesType ) {
+			// data is a long value
+			case NUMERIC: {
+				return SerializableDocValuesType.NUMERIC;
+			}
+			case SORTED_NUMERIC: {
+				return SerializableDocValuesType.SORTED_NUMERIC;
+			}
+
+			// data is ByteRef
+			case BINARY: {
+				return SerializableDocValuesType.BINARY;
+			}
+			case SORTED: {
+				return SerializableDocValuesType.SORTED;
+			}
+			case SORTED_SET: {
+				return SerializableDocValuesType.SORTED_SET;
+			}
+			default: {
+				// in case Lucene is going to add more in coming releases
+				throw log.unknownDocValuesTypeType( docValuesType.toString() );
+			}
+		}
+	}
+
 	public float getBoost() {
-		return field.getBoost();
+		return field.boost();
 	}
 
 	public boolean isOmitNorms() {
-		return field.getOmitNorms();
+		return fieldType.omitNorms();
 	}
 
 	public boolean isOmitTermFreqAndPositions() {
-		return field.getIndexOptions() == IndexOptions.DOCS_ONLY;
+		return fieldType.indexOptions() == IndexOptions.DOCS;
 	}
 
 	public String getStringValue() {
@@ -103,7 +125,7 @@ public class LuceneFieldContext {
 
 	public byte[] getReaderValue() {
 		Reader reader = field.readerValue();
-		if (reader instanceof Serializable) {
+		if ( reader instanceof Serializable ) {
 			return SerializationHelper.toByteArray( (Serializable) reader );
 		}
 		else {
@@ -112,18 +134,11 @@ public class LuceneFieldContext {
 	}
 
 	public SerializableTokenStream getTokenStream() {
-		return CopyTokenStream.buildSerializabletokenStream( field.tokenStreamValue() );
+		return CopyTokenStream.buildSerializableTokenStream( field.tokenStreamValue() );
 	}
 
-	public byte[] getBinaryValue() {
-		return field.getBinaryValue();
+	public BytesRef getBinaryValue() {
+		return field.binaryValue();
 	}
 
-	public int getBinaryOffset() {
-		return field.getBinaryOffset();
-	}
-
-	public int getBinaryLength() {
-		return field.getBinaryLength();
-	}
 }

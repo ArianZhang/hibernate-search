@@ -1,41 +1,26 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.analyzer.solr;
 
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.TermQuery;
+import java.util.Map;
+
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.Token;
-
+import org.apache.lucene.index.Term;
+import org.apache.lucene.search.TermQuery;
 import org.hibernate.Transaction;
-import org.hibernate.cfg.Configuration;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.test.SearchTestCase;
+import org.hibernate.search.test.SearchTestBase;
 import org.hibernate.search.util.AnalyzerUtils;
+import org.junit.Test;
 
 import static org.hibernate.search.test.analyzer.AnalyzerTest.assertTokensEqual;
+import static org.junit.Assert.assertEquals;
 
 /**
  * Tests the Solr analyzer creation framework.
@@ -47,7 +32,7 @@ import static org.hibernate.search.test.analyzer.AnalyzerTest.assertTokensEqual;
  * @author Emmanuel Bernard
  * @author Hardy Ferentschik
  */
-public class SolrAnalyzerTest extends SearchTestCase {
+public class SolrAnalyzerTest extends SearchTestBase {
 
 	/**
 	 * Tests that the token filters applied to <code>Team</code> are successfully created and used. Refer to
@@ -55,10 +40,11 @@ public class SolrAnalyzerTest extends SearchTestCase {
 	 *
 	 * @throws Exception in case the test fails
 	 */
+	@Test
 	public void testAnalyzerDef() throws Exception {
 		// create the test instance
 		Team team = new Team();
-		team.setDescription( "This is a D\u00E0scription" );  // \u00E0 == � - ISOLatin1AccentFilterFactory should strip of diacritic
+		team.setDescription( "This is a D\u00E0scription" ); // \u00E0 == � - ISOLatin1AccentFilterFactory should strip of diacritic
 		team.setLocation( "Atlanta" );
 		team.setName( "ATL team" );
 
@@ -73,7 +59,7 @@ public class SolrAnalyzerTest extends SearchTestCase {
 		tx = fts.beginTransaction();
 		TermQuery query = new TermQuery( new Term( "description", "D\u00E0scription" ) );
 		assertEquals(
-				"iso latin filter should work.  � should be a now", 0, fts.createFullTextQuery( query ).list().size()
+				"iso latin filter should work. � should be a now", 0, fts.createFullTextQuery( query ).list().size()
 		);
 
 		query = new TermQuery( new Term( "description", "is" ) );
@@ -99,18 +85,19 @@ public class SolrAnalyzerTest extends SearchTestCase {
 	 *
 	 * @throws Exception in case the test fails.
 	 */
+	@Test
 	public void testAnalyzers() throws Exception {
 		FullTextSession fts = Search.getFullTextSession( openSession() );
 
 		Analyzer analyzer = fts.getSearchFactory().getAnalyzer( "standard_analyzer" );
 		String text = "This is just FOOBAR's";
 		Token[] tokens = AnalyzerUtils.tokensFromAnalysis( analyzer, "name", text );
-		assertTokensEqual( tokens, new String[] { "This", "is", "just", "FOOBAR" } );
+		assertTokensEqual( tokens, new String[] { "This", "is", "just", "FOOBAR's" } );
 
 		analyzer = fts.getSearchFactory().getAnalyzer( "html_standard_analyzer" );
 		text = "This is <b>foo</b><i>bar's</i>";
 		tokens = AnalyzerUtils.tokensFromAnalysis( analyzer, "name", text );
-		assertTokensEqual( tokens, new String[] { "This", "is", "foobar" } );
+		assertTokensEqual( tokens, new String[] { "This", "is", "foobar's" } );
 
 		analyzer = fts.getSearchFactory().getAnalyzer( "html_whitespace_analyzer" );
 		text = "This is <b>foo</b><i>bar's</i>";
@@ -143,9 +130,9 @@ public class SolrAnalyzerTest extends SearchTestCase {
 		assertTokensEqual( tokens, new String[] { "Camel", "Case" } );
 
 		analyzer = fts.getSearchFactory().getAnalyzer( "synonym_analyzer" );
-		text = "ipod cosmos";
+		text = "ipod universe cosmos";
 		tokens = AnalyzerUtils.tokensFromAnalysis( analyzer, "name", text );
-		assertTokensEqual( tokens, new String[] { "ipod", "i-pod", "universe", "cosmos" } );
+		assertTokensEqual( tokens, new String[] { "ipod", "universe", "universe" } );
 
 		analyzer = fts.getSearchFactory().getAnalyzer( "shingle_analyzer" );
 		text = "please divide this sentence into shingles";
@@ -189,14 +176,16 @@ public class SolrAnalyzerTest extends SearchTestCase {
 		fts.close();
 	}
 
-	protected Class<?>[] getAnnotatedClasses() {
+	@Override
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] {
 				Team.class
 		};
 	}
 
-	protected void configure(Configuration cfg) {
+	@Override
+	public void configure(Map<String,Object> cfg) {
 		super.configure( cfg );
-		cfg.setProperty( "hibernate.search.lucene_version", org.apache.lucene.util.Version.LUCENE_30.name() );
+		cfg.put( "hibernate.search.lucene_version", org.apache.lucene.util.Version.LATEST.toString() );
 	}
 }

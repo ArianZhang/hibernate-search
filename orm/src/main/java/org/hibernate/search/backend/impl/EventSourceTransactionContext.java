@@ -1,50 +1,31 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.backend.impl;
 
 import java.io.Serializable;
+
 import javax.transaction.Status;
 import javax.transaction.Synchronization;
-import javax.transaction.TransactionManager;
-
-import org.hibernate.event.service.spi.EventListenerRegistry;
-import org.hibernate.event.spi.EventType;
-import org.hibernate.search.event.impl.FullTextIndexEventListener;
-import org.hibernate.search.util.logging.impl.Log;
 
 import org.hibernate.HibernateException;
 import org.hibernate.action.spi.AfterTransactionCompletionProcess;
 import org.hibernate.action.spi.BeforeTransactionCompletionProcess;
 import org.hibernate.engine.spi.ActionQueue;
 import org.hibernate.engine.spi.SessionImplementor;
+import org.hibernate.event.service.spi.EventListenerRegistry;
 import org.hibernate.event.spi.EventSource;
+import org.hibernate.event.spi.EventType;
 import org.hibernate.event.spi.FlushEventListener;
-import org.hibernate.search.SearchException;
 import org.hibernate.search.backend.TransactionContext;
+import org.hibernate.search.event.impl.FullTextIndexEventListener;
+import org.hibernate.search.exception.SearchException;
+import org.hibernate.search.util.logging.impl.Log;
 import org.hibernate.search.util.logging.impl.LoggerFactory;
 import org.hibernate.service.Service;
-import org.hibernate.service.jta.platform.spi.JtaPlatform;
 
 /**
  * Implementation of the transactional context on top of an EventSource (Session)
@@ -74,6 +55,7 @@ public class EventSourceTransactionContext implements TransactionContext, Serial
 		this.flushListener = getIndexWorkFlushEventListener();
 	}
 
+	@Override
 	public Object getTransactionIdentifier() {
 		if ( isRealTransactionInProgress() ) {
 			return eventSource.getTransaction();
@@ -83,6 +65,7 @@ public class EventSourceTransactionContext implements TransactionContext, Serial
 		}
 	}
 
+	@Override
 	public void registerSynchronization(Synchronization synchronization) {
 		if ( isRealTransactionInProgress() ) {
 			//use {Before|After}TransactionCompletionProcess instead of registerTransaction because it does not
@@ -130,9 +113,10 @@ public class EventSourceTransactionContext implements TransactionContext, Serial
 	}
 
 	private boolean isLocalTransaction() {
-		//TODO make it better but I don't know how we can optimize it.
-		final TransactionManager transactionManager = getService( JtaPlatform.class ).retrieveTransactionManager();
-		return transactionManager == null;
+		return !eventSource
+			.getTransactionCoordinator()
+			.getTransactionCoordinatorBuilder()
+			.isJta();
 	}
 
 	private <T extends Service> T getService(Class<T> serviceClass) {
@@ -140,7 +124,7 @@ public class EventSourceTransactionContext implements TransactionContext, Serial
 	}
 
 	private FullTextIndexEventListener getIndexWorkFlushEventListener() {
-		if ( this.flushListener != null) {
+		if ( this.flushListener != null ) {
 			//for the "transient" case: might have been nullified.
 			return flushListener;
 		}
@@ -158,6 +142,7 @@ public class EventSourceTransactionContext implements TransactionContext, Serial
 	//The code is not really fitting the method name;
 	//(unless you consider a flush as a mini-transaction)
 	//This is because we want to behave as "inTransaction" if the flushListener is registered.
+	@Override
 	public boolean isTransactionInProgress() {
 		// either it is a real transaction, or if we are capable to manage this in the IndexWorkFlushEventListener
 		return getIndexWorkFlushEventListener() != null || isRealTransactionInProgress();
@@ -178,11 +163,12 @@ public class EventSourceTransactionContext implements TransactionContext, Serial
 			this.synchronization = synchronization;
 		}
 
+		@Override
 		public void doBeforeTransactionCompletion(SessionImplementor sessionImplementor) {
 			try {
 				synchronization.beforeCompletion();
 			}
-			catch ( Exception e ) {
+			catch (Exception e) {
 				throw new HibernateException( "Error while indexing in Hibernate Search (before transaction completion)", e);
 			}
 		}
@@ -195,12 +181,13 @@ public class EventSourceTransactionContext implements TransactionContext, Serial
 			this.synchronization = synchronization;
 		}
 
+		@Override
 		public void doAfterTransactionCompletion(boolean success, SessionImplementor sessionImplementor) {
 			try {
 				synchronization.afterCompletion( success ? Status.STATUS_COMMITTED : Status.STATUS_ROLLEDBACK );
 			}
-			catch ( Exception e ) {
-				throw new HibernateException( "Error while indexing in Hibernate Search (ater transaction completion)", e);
+			catch (Exception e) {
+				throw new HibernateException( "Error while indexing in Hibernate Search (after transaction completion)", e);
 			}
 		}
 	}
@@ -212,10 +199,12 @@ public class EventSourceTransactionContext implements TransactionContext, Serial
 			this.synchronization = sync;
 		}
 
+		@Override
 		public void beforeCompletion() {
 			this.synchronization.beforeCompletion();
 		}
 
+		@Override
 		public void afterCompletion(int status) {
 			//do not delegate
 		}

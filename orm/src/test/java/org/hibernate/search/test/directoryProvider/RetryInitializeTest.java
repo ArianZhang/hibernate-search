@@ -1,20 +1,8 @@
 /*
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
+ * Hibernate Search, full-text search for your domain model
  *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.test.directoryProvider;
@@ -30,11 +18,11 @@ import java.io.File;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.RAMDirectory;
-import org.hibernate.search.SearchException;
-import org.hibernate.search.engine.spi.EntityIndexBinder;
-import org.hibernate.search.indexes.impl.DirectoryBasedIndexManager;
+import org.hibernate.search.exception.SearchException;
+import org.hibernate.search.engine.spi.EntityIndexBinding;
+import org.hibernate.search.indexes.spi.DirectoryBasedIndexManager;
 import org.hibernate.search.indexes.spi.IndexManager;
-import org.hibernate.search.spi.SearchFactoryIntegrator;
+import org.hibernate.search.spi.SearchIntegrator;
 import org.hibernate.search.test.util.FullTextSessionBuilder;
 import org.junit.After;
 import org.junit.Before;
@@ -45,7 +33,7 @@ import org.junit.Test;
  * {@link org.hibernate.search.store.impl.DirectoryProviderHelper#getRetryInitializePeriod(java.util.Properties, String)}
  * (HSEARCH-323)
  *
- * @author Sanne Grinovero <sanne@hibernate.org> (C) 2011 Red Hat Inc.
+ * @author Sanne Grinovero (C) 2011 Red Hat Inc.
  */
 public class RetryInitializeTest {
 
@@ -60,8 +48,12 @@ public class RetryInitializeTest {
 
 	@After
 	public void tearDown() throws Exception {
-		if ( slave != null ) slave.close();
-		if ( master != null ) master.close();
+		if ( slave != null ) {
+			slave.close();
+		}
+		if ( master != null ) {
+			master.close();
+		}
 		FSSlaveAndMasterDPTest.cleanupDirectories( root );
 	}
 
@@ -85,9 +77,9 @@ public class RetryInitializeTest {
 		assertNotNull( scheduledPeriod );
 		assertEquals( Long.valueOf( 12000L ), scheduledPeriod );
 
-		SearchFactoryIntegrator searchFactory = (SearchFactoryIntegrator) slave.getSearchFactory();
+		SearchIntegrator integrator = slave.getSearchFactory().unwrap( SearchIntegrator.class );
 
-		EntityIndexBinder snowIndexBinder = searchFactory.getIndexBindingForEntity( SnowStorm.class );
+		EntityIndexBinding snowIndexBinder = integrator.getIndexBinding( SnowStorm.class );
 		IndexManager[] indexManagers = snowIndexBinder.getIndexManagers();
 		assertEquals( 1, indexManagers.length );
 		DirectoryBasedIndexManager indexManager = (DirectoryBasedIndexManager) indexManagers[0];

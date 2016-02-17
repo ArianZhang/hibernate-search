@@ -1,22 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.jpa.impl;
 
@@ -29,14 +15,18 @@ import org.hibernate.Session;
  * Helper class for {@code FullTextQueryImpl} to extract information out of an
  * Hibernate {@code OptimisticLockException} and create the JPA counterpart.
  *
- * @author Sanne Grinovero <sanne@hibernate.org> (C) 2011 Red Hat Inc.
+ * @author Sanne Grinovero (C) 2011 Red Hat Inc.
  */
-public class OptimisticLockingCompatibilityHelper {
+final class OptimisticLockingCompatibilityHelper {
 
 	//This is the new class name, and is extended by the deprecated one so it is compatible with both types
 	private static final String parentOptimisticLockExceptionClassName = "org.hibernate.dialect.lock.OptimisticEntityLockException";
 	private static final String deprecatedOptimisticLockExceptionClassName = "org.hibernate.OptimisticLockException";
 	private static final Class optimisticLockExceptionClass = determineCompatibleOptimisticLockExceptionClass();
+
+	private OptimisticLockingCompatibilityHelper() {
+		//not allowed
+	}
 
 	/**
 	 * Looks for the new Hibernate class name, or falls back to the older one.
@@ -47,7 +37,7 @@ public class OptimisticLockingCompatibilityHelper {
 		try {
 			return Class.forName( parentOptimisticLockExceptionClassName, true, Session.class.getClassLoader() );
 		}
-		catch ( ClassNotFoundException e ) {
+		catch (ClassNotFoundException e) {
 			// the failing class was introduced in Hibernate Core 4.0.0.CR7 only; fall back to old name when it's not found:
 			try {
 				return Class.forName(
@@ -56,7 +46,7 @@ public class OptimisticLockingCompatibilityHelper {
 						Session.class.getClassLoader()
 				);
 			}
-			catch ( ClassNotFoundException e1 ) {
+			catch (ClassNotFoundException e1) {
 				// this is fatal, will need to check for null at runtime
 				return null;
 			}

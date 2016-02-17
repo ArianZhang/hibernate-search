@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.backend.impl.batch;
 
@@ -30,13 +13,16 @@ import java.util.Set;
 import org.hibernate.search.backend.FlushLuceneWork;
 import org.hibernate.search.backend.LuceneWork;
 import org.hibernate.search.backend.OptimizeLuceneWork;
-import org.hibernate.search.backend.impl.StreamingSelectionVisitor;
-import org.hibernate.search.backend.impl.TransactionalSelectionVisitor;
+import org.hibernate.search.backend.impl.StreamingOperationExecutor;
+import org.hibernate.search.backend.impl.StreamingOperationExecutorSelector;
+import org.hibernate.search.backend.impl.TransactionalOperationExecutor;
+import org.hibernate.search.backend.impl.TransactionalOperationExecutorSelector;
 import org.hibernate.search.backend.impl.WorkQueuePerIndexSplitter;
+import org.hibernate.search.backend.spi.BatchBackend;
 import org.hibernate.search.batchindexing.MassIndexerProgressMonitor;
-import org.hibernate.search.engine.spi.EntityIndexBinder;
+import org.hibernate.search.engine.spi.EntityIndexBinding;
 import org.hibernate.search.indexes.spi.IndexManager;
-import org.hibernate.search.spi.SearchFactoryIntegrator;
+import org.hibernate.search.spi.SearchIntegrator;
 import org.hibernate.search.store.IndexShardingStrategy;
 
 /**
@@ -45,38 +31,40 @@ import org.hibernate.search.store.IndexShardingStrategy;
  * are used to make changes to each index, so order of Work processing is not guaranteed.
  *
  * @author Sanne Grinovero
- * @experimental First {@code BatchBackend}
+ * @hsearch.experimental First {@code BatchBackend}
  */
 public class DefaultBatchBackend implements BatchBackend {
 
-	private final SearchFactoryIntegrator searchFactoryImplementor;
+	private final SearchIntegrator integrator;
 	private final MassIndexerProgressMonitor progressMonitor;
 
-	public DefaultBatchBackend(SearchFactoryIntegrator searchFactoryImplementor, MassIndexerProgressMonitor progressMonitor) {
-		this.searchFactoryImplementor = searchFactoryImplementor;
+	public DefaultBatchBackend(SearchIntegrator integrator, MassIndexerProgressMonitor progressMonitor) {
+		this.integrator = integrator;
 		this.progressMonitor = progressMonitor;
 	}
 
+	@Override
 	public void enqueueAsyncWork(LuceneWork work) throws InterruptedException {
 		sendWorkToShards( work, true );
 	}
 
+	@Override
 	public void doWorkInSync(LuceneWork work) {
 		sendWorkToShards( work, false );
 	}
 
 	private void sendWorkToShards(LuceneWork work, boolean forceAsync) {
 		final Class<?> entityType = work.getEntityClass();
-		EntityIndexBinder entityIndexBinding = searchFactoryImplementor.getIndexBindingForEntity( entityType );
+		EntityIndexBinding entityIndexBinding = integrator.getIndexBinding( entityType );
 		IndexShardingStrategy shardingStrategy = entityIndexBinding.getSelectionStrategy();
 		if ( forceAsync ) {
-			work.getWorkDelegate( StreamingSelectionVisitor.INSTANCE )
-					.performStreamOperation( work, shardingStrategy, progressMonitor, forceAsync );
+			StreamingOperationExecutor executor = work.acceptIndexWorkVisitor( StreamingOperationExecutorSelector.INSTANCE, null );
+			executor.performStreamOperation( work, shardingStrategy, progressMonitor, forceAsync );
 		}
 		else {
 			WorkQueuePerIndexSplitter workContext = new WorkQueuePerIndexSplitter();
-			work.getWorkDelegate( TransactionalSelectionVisitor.INSTANCE )
-					.performOperation( work, shardingStrategy, workContext );
+			TransactionalOperationExecutor executor = work.acceptIndexWorkVisitor( TransactionalOperationExecutorSelector.INSTANCE, null );
+			executor.performOperation( work, shardingStrategy, workContext );
 			workContext.commitOperations( progressMonitor ); //FIXME I need a "Force sync" actually for when using PurgeAll before the indexing starts
 		}
 	}
@@ -100,7 +88,7 @@ public class DefaultBatchBackend implements BatchBackend {
 	private Collection<IndexManager> uniqueIndexManagerForTypes(Collection<Class<?>> entityTypes) {
 		HashMap<String,IndexManager> uniqueBackends = new HashMap<String, IndexManager>( entityTypes.size() );
 		for ( Class<?> type : entityTypes ) {
-			EntityIndexBinder indexBindingForEntity = searchFactoryImplementor.getIndexBindingForEntity( type );
+			EntityIndexBinding indexBindingForEntity = integrator.getIndexBinding( type );
 			if ( indexBindingForEntity != null ) {
 				IndexManager[] indexManagers = indexBindingForEntity.getIndexManagers();
 				for ( IndexManager im : indexManagers ) {

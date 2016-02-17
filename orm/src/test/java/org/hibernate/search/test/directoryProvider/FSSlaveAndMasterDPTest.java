@@ -1,43 +1,26 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.directoryProvider;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.lucene.queryParser.QueryParser;
-
+import org.apache.lucene.queryparser.classic.QueryParser;
+import org.hibernate.HibernateException;
 import org.hibernate.Session;
 import org.hibernate.Transaction;
-import org.hibernate.HibernateException;
 import org.hibernate.cfg.Configuration;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.SearchException;
-import org.hibernate.search.test.TestConstants;
+import org.hibernate.search.exception.SearchException;
+import org.hibernate.search.testsupport.TestConstants;
 import org.hibernate.search.util.impl.FileHelper;
 import org.hibernate.search.util.logging.impl.Log;
 import org.hibernate.search.util.logging.impl.LoggerFactory;
@@ -84,7 +67,7 @@ public class FSSlaveAndMasterDPTest extends MultipleSFTestCase {
 		// assert that the slave index is empty
 		FullTextSession fullTextSession = Search.getFullTextSession( getSlaveSession() );
 		Transaction tx = fullTextSession.beginTransaction();
-		QueryParser parser = new QueryParser( getTargetLuceneVersion(), "id", TestConstants.stopAnalyzer );
+		QueryParser parser = new QueryParser( "id", TestConstants.stopAnalyzer );
 		List result = fullTextSession.createFullTextQuery( parser.parse( "location:texas" ) ).list();
 		assertEquals( "No copy yet, fresh index expected", 0, result.size() );
 		tx.commit();
@@ -172,9 +155,9 @@ public class FSSlaveAndMasterDPTest extends MultipleSFTestCase {
 		return getSessionFactories()[1].openSession();
 	}
 
-	static File prepareDirectories(String testId) {
+	static File prepareDirectories(String testId) throws IOException {
 
-		String superRootPath = TestConstants.getIndexDirectory( FSSlaveAndMasterDPTest.class );
+		String superRootPath = TestConstants.getIndexDirectory( TestConstants.getTempTestDataDir() );
 		File root = new File( superRootPath, testId );
 
 		if ( root.exists() ) {
@@ -208,26 +191,30 @@ public class FSSlaveAndMasterDPTest extends MultipleSFTestCase {
 		return root;
 	}
 
+	@Override
 	protected void setUp() throws Exception {
 		this.root = prepareDirectories( getClass().getSimpleName() + "." + this.getName() );
 		super.setUp();
 	}
 
+	@Override
 	protected void tearDown() throws Exception {
 		super.tearDown();
 		cleanupDirectories( root );
 	}
 
-	static void cleanupDirectories( File root ) {
+	static void cleanupDirectories( File root ) throws IOException {
 		log.debugf( "Deleting test directory %s ", root.getAbsolutePath() );
 		FileHelper.delete( root );
 	}
 
+	@Override
 	protected int getSFNbrs() {
 		return 2;
 	}
 
-	protected Class<?>[] getAnnotatedClasses() {
+	@Override
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] {
 				SnowStorm.class
 		};
@@ -252,12 +239,13 @@ public class FSSlaveAndMasterDPTest extends MultipleSFTestCase {
 		try {
 			cfg.buildSessionFactory();
 		}
-		catch ( SearchException e ) {
+		catch (SearchException e) {
 			final long elapsedTime = TimeUnit.NANOSECONDS.toSeconds( System.nanoTime() - start );
 			assertTrue( "Should be around 10 seconds: " + elapsedTime, elapsedTime > retries * 5 - 1 ); // -1 for safety
 		}
 	}
 
+	@Override
 	protected void configure(Configuration[] cfg) {
 		//master
 		cfg[0].setProperty( "hibernate.search.default.sourceBase", root.getAbsolutePath() + masterCopy );

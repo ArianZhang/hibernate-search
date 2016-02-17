@@ -1,41 +1,30 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2011, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.test.embedded.path;
 
 import java.util.List;
 
-import junit.framework.Assert;
-
 import org.apache.lucene.search.Query;
+
 import org.hibernate.Session;
 import org.hibernate.Transaction;
+
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.SearchException;
+import org.hibernate.search.exception.SearchException;
 import org.hibernate.search.query.dsl.QueryBuilder;
-import org.hibernate.search.test.SearchTestCase;
+import org.hibernate.search.test.SearchTestBase;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
+import static org.junit.Assert.fail;
 
 /**
  * John of England Genealogy
@@ -57,10 +46,11 @@ import org.hibernate.search.test.SearchTestCase;
  *
  * @author Davide D'Alto
  */
-public class PathEmbeddedDepthTest extends SearchTestCase {
+public class PathEmbeddedDepthTest extends SearchTestBase {
 
 	private Session session = null;
 
+	@Test
 	public void testShouldIndexFieldInPath() throws Exception {
 		List<Human> result = search( session, "parents.parents.parents.name", "Philippa" );
 
@@ -70,6 +60,7 @@ public class PathEmbeddedDepthTest extends SearchTestCase {
 				"John of England", result.get( 0 ).getFullname() );
 	}
 
+	@Test
 	public void testIndexFieldIfInsideDepth() throws Exception {
 		List<Human> result = search( session, "parents.parents.name", "Empress" );
 
@@ -79,15 +70,17 @@ public class PathEmbeddedDepthTest extends SearchTestCase {
 				"John of England", result.get( 0 ).getFullname() );
 	}
 
+	@Test
 	public void testShouldNotIndexFieldOutsidePathAndOverDepth() throws Exception {
 		try {
 			search( session, "parents.parents.parents.surname", "de Montfort" );
 			fail( "Shoudl not index a field if not in path and over the depth threshold" );
 		}
-		catch ( SearchException e ) {
+		catch (SearchException e) {
 		}
 	}
 
+	@Test
 	public void testShouldIndexFieldNotInPathButInsideDepthThreshold() throws Exception {
 		List<Human> result = search( session, "parents.parents.surname", "de Châtellerault" );
 
@@ -97,6 +90,7 @@ public class PathEmbeddedDepthTest extends SearchTestCase {
 	}
 
 	@Override
+	@Before
 	public void setUp() throws Exception {
 		super.setUp();
 		session = openSession();
@@ -139,6 +133,7 @@ public class PathEmbeddedDepthTest extends SearchTestCase {
 	}
 
 	@Override
+	@After
 	public void tearDown() throws Exception {
 		session.clear();
 
@@ -168,7 +163,7 @@ public class PathEmbeddedDepthTest extends SearchTestCase {
 	}
 
 	@Override
-	protected Class<?>[] getAnnotatedClasses() {
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class<?>[] { Human.class };
 	}
 }

@@ -1,43 +1,34 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.configuration;
+
+import javax.persistence.Entity;
+import javax.persistence.Id;
+import javax.persistence.Table;
 
 import static org.junit.Assert.assertEquals;
 
 import org.hibernate.search.FullTextSession;
+import org.hibernate.search.annotations.Indexed;
 import org.hibernate.search.backend.impl.lucene.AbstractWorkspaceImpl;
 import org.hibernate.search.backend.impl.lucene.ExclusiveIndexWorkspaceImpl;
 import org.hibernate.search.backend.impl.lucene.LuceneBackendQueueProcessor;
 import org.hibernate.search.backend.impl.lucene.SharedIndexWorkspaceImpl;
 import org.hibernate.search.backend.spi.BackendQueueProcessor;
-import org.hibernate.search.engine.spi.SearchFactoryImplementor;
-import org.hibernate.search.indexes.impl.DirectoryBasedIndexManager;
+import org.hibernate.search.engine.integration.impl.ExtendedSearchIntegrator;
 import org.hibernate.search.indexes.impl.IndexManagerHolder;
+import org.hibernate.search.indexes.spi.DirectoryBasedIndexManager;
 import org.hibernate.search.test.util.FullTextSessionBuilder;
 import org.junit.Test;
 
 /**
  * Verifies the property exclusive_index_use is properly applied to the backend
  *
- * @author Sanne Grinovero <sanne@hibernate.org> (C) 2011 Red Hat Inc.
+ * @author Sanne Grinovero (C) 2011 Red Hat Inc.
  */
 public class ExclusiveIndexTest {
 
@@ -45,22 +36,25 @@ public class ExclusiveIndexTest {
 	public void verifyIndexExclusivity() {
 		FullTextSessionBuilder builder = new FullTextSessionBuilder();
 		FullTextSession ftSession = builder
-			.setProperty( "hibernate.search.org.hibernate.search.test.configuration.BlogEntry.exclusive_index_use", "true" )
+			.setProperty(
+					"hibernate.search.org.hibernate.search.test.configuration.BlogEntry.exclusive_index_use",
+					"true"
+			)
 			.setProperty( "hibernate.search.Book.exclusive_index_use", "false" )
 			.addAnnotatedClass( BlogEntry.class )
-			.addAnnotatedClass( org.hibernate.search.test.perf.Boat.class )
+			.addAnnotatedClass( Foo.class )
 			.addAnnotatedClass( org.hibernate.search.test.query.Book.class )
 			.addAnnotatedClass( org.hibernate.search.test.query.Author.class )
 			.openFullTextSession();
-		SearchFactoryImplementor searchFactory = (SearchFactoryImplementor) ftSession.getSearchFactory();
+		ExtendedSearchIntegrator integrator = ftSession.getSearchFactory().unwrap( ExtendedSearchIntegrator.class );
 		ftSession.close();
-		IndexManagerHolder allIndexesManager = searchFactory.getIndexManagerHolder();
+		IndexManagerHolder allIndexesManager = integrator.getIndexManagerHolder();
 		//explicitly enabled:
 		assertExclusiveIsEnabled( allIndexesManager, "org.hibernate.search.test.configuration.BlogEntry", true );
 		//explicitly disabled (this entity defined a short index name):
 		assertExclusiveIsEnabled( allIndexesManager, "Book", false );
 		//using default:
-		assertExclusiveIsEnabled( allIndexesManager, "org.hibernate.search.test.perf.Boat", true );
+		assertExclusiveIsEnabled( allIndexesManager, Foo.class.getName(), true );
 		builder.close();
 	}
 
@@ -78,4 +72,12 @@ public class ExclusiveIndexTest {
 		}
 	}
 
+	@Indexed
+	@Entity
+	@Table(name = "Foo")
+	public static class Foo {
+
+		@Id
+		private int id;
+	}
 }

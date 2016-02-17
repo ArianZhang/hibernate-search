@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.store.impl;
 
@@ -36,26 +19,26 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.RAMDirectory;
-
-import org.hibernate.search.indexes.impl.DirectoryBasedIndexManager;
+import org.hibernate.search.cfg.Environment;
+import org.hibernate.search.engine.service.spi.ServiceManager;
+import org.hibernate.search.exception.AssertionFailure;
+import org.hibernate.search.exception.SearchException;
+import org.hibernate.search.indexes.spi.DirectoryBasedIndexManager;
 import org.hibernate.search.spi.BuildContext;
 import org.hibernate.search.store.DirectoryProvider;
+import org.hibernate.search.store.spi.DirectoryHelper;
 import org.hibernate.search.util.configuration.impl.ConfigurationParseHelper;
 import org.hibernate.search.util.impl.FileHelper;
 import org.hibernate.search.util.logging.impl.Log;
-
-import org.hibernate.annotations.common.AssertionFailure;
-import org.hibernate.search.Environment;
-import org.hibernate.search.SearchException;
 import org.hibernate.search.util.logging.impl.LoggerFactory;
 
 /**
  * File based directory provider that takes care of getting a version of the index
  * from a given source.
- * The base directory is represented by hibernate.search.<index>.indexBase
- * The index is created in <base directory>/<index name>
- * The source (aka copy) directory is built from <sourceBase>/<index name>
- * <p/>
+ * The base directory is represented by hibernate.search.{@literal <index>}.indexBase
+ * The index is created in {@literal <base directory>/<index name>}
+ * The source (aka copy) directory is built from {@literal <sourceBase>/<index name>}
+ * <p>
  * A copy is triggered every refresh seconds
  *
  * @author Emmanuel Bernard
@@ -85,20 +68,22 @@ public class FSSlaveDirectoryProvider implements DirectoryProvider<Directory> {
 	private String directoryProviderName;
 	private Properties properties;
 	private UpdateTask updateTask;
+	private ServiceManager serviceManager;
 
 	@Override
 	public void initialize(String directoryProviderName, Properties properties, BuildContext context) {
 		this.properties = properties;
 		this.directoryProviderName = directoryProviderName;
+		this.serviceManager = context.getServiceManager();
 		//source guessing
 		sourceIndexDir = DirectoryProviderHelper.getSourceDirectory( directoryProviderName, properties, false );
 		log.debugf( "Source directory: %s", sourceIndexDir.getPath() );
-		indexDir = DirectoryProviderHelper.getVerifiedIndexDir( directoryProviderName, properties, true );
+		indexDir = DirectoryHelper.getVerifiedIndexDir( directoryProviderName, properties, true );
 		log.debugf( "Index directory: %s", indexDir.getPath() );
 		try {
 			indexName = indexDir.getCanonicalPath();
 		}
-		catch ( IOException e ) {
+		catch (IOException e) {
 			throw new SearchException( "Unable to initialize index: " + directoryProviderName, e );
 		}
 		copyChunkSize = DirectoryProviderHelper.getCopyBufferSize( directoryProviderName, properties );
@@ -114,11 +99,11 @@ public class FSSlaveDirectoryProvider implements DirectoryProvider<Directory> {
 		boolean currentMarkerInSource = false;
 		for ( int tried = 0 ; tried <= retry ; tried++ ) {
 			//we try right away the first time
-			if ( tried > 0) {
+			if ( tried > 0 ) {
 				try {
 					Thread.sleep( TimeUnit.SECONDS.toMillis( 5 ) );
 				}
-				catch ( InterruptedException e ) {
+				catch (InterruptedException e) {
 					//continue
 					Thread.currentThread().interrupt();
 				}
@@ -153,8 +138,8 @@ public class FSSlaveDirectoryProvider implements DirectoryProvider<Directory> {
 		int readCurrentState = current; //Unneeded value, but ensure visibility of state protected by memory barrier
 		int currentToBe = 0;
 		try {
-			directory1 = DirectoryProviderHelper.createFSIndex( new File( indexDir, "1" ), properties );
-			directory2 = DirectoryProviderHelper.createFSIndex( new File( indexDir, "2" ), properties );
+			directory1 = DirectoryProviderHelper.createFSIndex( new File( indexDir, "1" ), properties, serviceManager );
+			directory2 = DirectoryProviderHelper.createFSIndex( new File( indexDir, "2" ), properties, serviceManager );
 			File currentMarker = new File( indexDir, "current1" );
 			File current2Marker = new File( indexDir, "current2" );
 			if ( currentMarker.exists() ) {
@@ -187,7 +172,7 @@ public class FSSlaveDirectoryProvider implements DirectoryProvider<Directory> {
 							destinationFile, true, copyChunkSize
 					);
 				}
-				catch ( IOException e ) {
+				catch (IOException e) {
 					throw new SearchException( "Unable to synchronize directory: " + indexName, e );
 				}
 				if ( !currentMarker.createNewFile() ) {
@@ -196,7 +181,7 @@ public class FSSlaveDirectoryProvider implements DirectoryProvider<Directory> {
 			}
 			log.debugf( "Current directory: %d", currentToBe );
 		}
-		catch ( IOException e ) {
+		catch (IOException e) {
 			throw new SearchException( "Unable to initialize index: " + directoryProviderName, e );
 		}
 		updateTask = new UpdateTask( sourceIndexDir, indexDir );
@@ -206,11 +191,12 @@ public class FSSlaveDirectoryProvider implements DirectoryProvider<Directory> {
 		started = true;
 	}
 
+	@Override
 	public Directory getDirectory() {
 		if ( !started ) {
 			if ( dummyDirectory == null ) {
 				RAMDirectory directory = new RAMDirectory();
-				DirectoryProviderHelper.initializeIndexIfNeeded( directory );
+				DirectoryHelper.initializeIndexIfNeeded( directory );
 				dummyDirectory = directory;
 			}
 			return dummyDirectory;
@@ -305,6 +291,7 @@ public class FSSlaveDirectoryProvider implements DirectoryProvider<Directory> {
 			copyTask = new CopyDirectory( sourceIndexDir, destination );
 		}
 
+		@Override
 		public void run() {
 			if ( copyTask.inProgress.compareAndSet( false, true ) ) {
 				executor.execute( copyTask );
@@ -333,6 +320,7 @@ public class FSSlaveDirectoryProvider implements DirectoryProvider<Directory> {
 			this.destination = destination;
 		}
 
+		@Override
 		public void run() {
 			long start = System.nanoTime();
 			try {
@@ -352,7 +340,7 @@ public class FSSlaveDirectoryProvider implements DirectoryProvider<Directory> {
 						return;
 					}
 				}
-				catch ( IOException ioe ) {
+				catch (IOException ioe) {
 					log.unableToCompareSourceWithDestinationDirectory( sourceFile.getName(), currentDestinationFile.getName() );
 				}
 
@@ -366,7 +354,7 @@ public class FSSlaveDirectoryProvider implements DirectoryProvider<Directory> {
 					current = index;
 					log.tracef( "Copy for %s took %d ms", indexName, TimeUnit.NANOSECONDS.toMillis( System.nanoTime() - start ) );
 				}
-				catch ( IOException e ) {
+				catch (IOException e) {
 					//don't change current
 					log.unableToSynchronizeSource( indexName, e );
 					return;
@@ -377,7 +365,7 @@ public class FSSlaveDirectoryProvider implements DirectoryProvider<Directory> {
 				try {
 					new File( indexName, "current" + index ).createNewFile();
 				}
-				catch ( IOException e ) {
+				catch (IOException e) {
 					log.unableToCreateCurrentMarker( indexName, e );
 				}
 			}
@@ -403,6 +391,7 @@ public class FSSlaveDirectoryProvider implements DirectoryProvider<Directory> {
 		}
 	}
 
+	@Override
 	public void stop() {
 		@SuppressWarnings("unused")
 		int readCurrentState = current; //unneeded value, but ensure visibility of state protected by memory barrier
@@ -419,7 +408,7 @@ public class FSSlaveDirectoryProvider implements DirectoryProvider<Directory> {
 			try {
 				directory.close();
 			}
-			catch ( Exception e ) {
+			catch (Exception e) {
 				log.unableToCloseLuceneDirectory( directory, e );
 			}
 		}

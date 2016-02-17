@@ -1,30 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Hibernate, Relational Persistence for Idiomatic Java
-  ~
-  ~ Copyright (c) 2012, Red Hat, Inc. and/or its affiliates or third-party contributors as
-  ~ indicated by the @author tags or express copyright attribution
-  ~ statements applied by the authors.  All third-party contributions are
-  ~ distributed under license by Red Hat, Inc.
-  ~
-  ~ This copyrighted material is made available to anyone wishing to use, modify,
-  ~ copy, or redistribute it subject to the terms and conditions of the GNU
-  ~ Lesser General Public License, as published by the Free Software Foundation.
-  ~
-  ~ This program is distributed in the hope that it will be useful,
-  ~ but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-  ~ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
-  ~ for more details.
-  ~
-  ~ You should have received a copy of the GNU Lesser General Public License
-  ~ along with this distribution; if not, write to:
-  ~ Free Software Foundation, Inc.
-  ~ 51 Franklin Street, Fifth Floor
-  ~ Boston, MA  02110-1301  USA
+ ~ Hibernate Search, full-text search for your domain model
+ ~
+ ~ License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ ~ See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
   -->
 <assembly>
-    <id>jbossas-72-dist</id>
+    <id>wildfly-10-dist</id>
     <formats>
         <format>zip</format>
+        <format>dir</format> <!-- For ease of debugging only -->
     </formats>
     <includeBaseDirectory>false</includeBaseDirectory>
     <baseDirectory>/</baseDirectory>
@@ -32,27 +17,47 @@
     <files>
         <file>
             <source>${module.xml.basedir}/lucene/module.xml</source>
-            <outputDirectory>/org/apache/lucene/${luceneVersion}</outputDirectory>
+            <outputDirectory>/org/apache/lucene/${lucene.module.slot}</outputDirectory>
             <filtered>true</filtered>
         </file>
         <file>
-            <source>${module.xml.basedir}/solr/module.xml</source>
-            <outputDirectory>/org/apache/solr/${luceneVersion}</outputDirectory>
+            <source>${module.xml.basedir}/lucene_internal/module.xml</source>
+            <outputDirectory>/org/apache/lucene/internal/${lucene.module.slot}</outputDirectory>
             <filtered>true</filtered>
         </file>
         <file>
             <source>${module.xml.basedir}/search/engine/module.xml</source>
+            <outputDirectory>/org/hibernate/search/engine/${hibernate.search.version}</outputDirectory>
+            <filtered>true</filtered>
+        </file>
+        <file>
+            <source>${aliases.xml.basedir}/search/engine/module.xml</source>
             <outputDirectory>/org/hibernate/search/engine/${hibernate.search.module.slot}</outputDirectory>
             <filtered>true</filtered>
         </file>
         <file>
             <source>${module.xml.basedir}/search/orm/module.xml</source>
+            <outputDirectory>/org/hibernate/search/orm/${hibernate.search.version}</outputDirectory>
+            <filtered>true</filtered>
+        </file>
+        <file>
+            <source>${aliases.xml.basedir}/search/orm/module.xml</source>
             <outputDirectory>/org/hibernate/search/orm/${hibernate.search.module.slot}</outputDirectory>
             <filtered>true</filtered>
         </file>
         <file>
-            <source>${module.xml.basedir}/infinispan/lucene-directory/module.xml</source>
-            <outputDirectory>/org/infinispan/lucene-directory/${infinispanVersion}</outputDirectory>
+            <source>${module.xml.basedir}/search/backend-jms/module.xml</source>
+            <outputDirectory>/org/hibernate/search/backend-jms/${hibernate.search.version}</outputDirectory>
+            <filtered>true</filtered>
+        </file>
+        <file>
+            <source>${module.xml.basedir}/search/serialization-avro/module.xml</source>
+            <outputDirectory>/org/hibernate/search/serialization-avro/${hibernate.search.version}</outputDirectory>
+            <filtered>true</filtered>
+        </file>
+        <file>
+            <source>${module.xml.basedir}/search/backend-jgroups/module.xml</source>
+            <outputDirectory>/org/hibernate/search/backend-jgroups/${hibernate.search.version}</outputDirectory>
             <filtered>true</filtered>
         </file>
     </files>
@@ -60,26 +65,37 @@
     <dependencySets>
         <dependencySet>
             <useProjectArtifact>false</useProjectArtifact>
-            <outputDirectory>org/hibernate/search/engine/${hibernate.search.module.slot}</outputDirectory>
-            <useTransitiveFiltering>true</useTransitiveFiltering>
+            <outputDirectory>org/hibernate/search/engine/${hibernate.search.version}</outputDirectory>
+            <useTransitiveFiltering>false</useTransitiveFiltering>
             <unpack>false</unpack>
             <includes>
                 <include>org.hibernate:hibernate-search-engine</include>
-                <include>org.hibernate:hibernate-search-analyzer</include>
-                <include>org.hibernate:hibernate-search-infinispan</include>
             </includes>
-            <excludes>
-                <exclude>org.apache.lucene:*</exclude>
-                <exclude>org.apache.solr:*</exclude>
-                <exclude>org.hibernate.common:*</exclude>
-                <exclude>org.slf4j:slf4j-api:*</exclude>
-                <exclude>org.jboss.logging:*</exclude>
-            </excludes>
         </dependencySet>
 
         <dependencySet>
             <useProjectArtifact>false</useProjectArtifact>
-            <outputDirectory>org/hibernate/search/orm/${hibernate.search.module.slot}</outputDirectory>
+            <outputDirectory>org/hibernate/search/serialization-avro/${hibernate.search.version}</outputDirectory>
+            <useTransitiveFiltering>false</useTransitiveFiltering>
+            <unpack>false</unpack>
+            <includes>
+                <include>org.hibernate:hibernate-search-serialization-avro</include>
+            </includes>
+        </dependencySet>
+
+        <dependencySet>
+            <useProjectArtifact>false</useProjectArtifact>
+            <outputDirectory>org/hibernate/search/backend-jgroups/${hibernate.search.version}</outputDirectory>
+            <useTransitiveFiltering>false</useTransitiveFiltering>
+            <unpack>false</unpack>
+            <includes>
+                <include>org.hibernate:hibernate-search-backend-jgroups</include>
+            </includes>
+        </dependencySet>
+
+        <dependencySet>
+            <useProjectArtifact>false</useProjectArtifact>
+            <outputDirectory>org/hibernate/search/orm/${hibernate.search.version}</outputDirectory>
             <useTransitiveFiltering>false</useTransitiveFiltering>
             <unpack>false</unpack>
             <includes>
@@ -89,36 +105,38 @@
 
         <dependencySet>
             <useProjectArtifact>false</useProjectArtifact>
-            <outputDirectory>org/infinispan/lucene-directory/${infinispanVersion}</outputDirectory>
+            <outputDirectory>org/hibernate/search/backend-jms/${hibernate.search.version}</outputDirectory>
             <useTransitiveFiltering>false</useTransitiveFiltering>
             <unpack>false</unpack>
             <includes>
-                <include>org.infinispan:infinispan-lucene-directory</include>
+                <include>org.hibernate:hibernate-search-backend-jms</include>
             </includes>
         </dependencySet>
 
         <dependencySet>
             <useProjectArtifact>false</useProjectArtifact>
-            <outputDirectory>org/apache/lucene/${luceneVersion}</outputDirectory>
+            <outputDirectory>org/apache/lucene/${lucene.module.slot}</outputDirectory>
             <useTransitiveFiltering>false</useTransitiveFiltering>
             <unpack>false</unpack>
             <includes>
-                <include>org.apache.lucene:*</include>
-                <include>jakarta-regexp:jakarta-regexp:*</include>
+                <include>org.apache.lucene:lucene-core</include>
+                <include>org.apache.lucene:lucene-queryparser</include>
+                <include>org.apache.lucene:lucene-queries</include>
+                <include>org.apache.lucene:lucene-facet</include>
+                <include>org.apache.lucene:lucene-analyzers-common</include>
             </includes>
         </dependencySet>
 
         <dependencySet>
             <useProjectArtifact>false</useProjectArtifact>
-            <outputDirectory>org/apache/solr/${luceneVersion}</outputDirectory>
-            <useTransitiveFiltering>true</useTransitiveFiltering>
+            <outputDirectory>org/apache/lucene/internal/${lucene.module.slot}</outputDirectory>
+            <useTransitiveFiltering>false</useTransitiveFiltering>
             <unpack>false</unpack>
             <includes>
-                <include>org.apache.solr:*</include>
+                <include>org.apache.lucene:lucene-backward-codecs</include>
+                <include>org.apache.lucene:lucene-misc</include>
             </includes>
-            <excludes>
-                <exclude>org.apache.lucene:*</exclude>
-            </excludes>
         </dependencySet>
+
     </dependencySets>
 </assembly>

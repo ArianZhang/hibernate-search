@@ -1,63 +1,38 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.jpa;
 
-import java.util.Map;
-import java.util.HashMap;
-import java.util.Properties;
-import java.util.ArrayList;import java.util.Arrays;
-import java.io.InputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Properties;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.Persistence;
 
+import org.apache.lucene.analysis.core.StopAnalyzer;
+import org.apache.lucene.util.Version;
 import org.hibernate.cfg.Environment;
 import org.hibernate.ejb.AvailableSettings;
-import org.hibernate.ejb.HibernatePersistence;
-import org.hibernate.search.test.TestConstants;
+import org.hibernate.search.testsupport.TestConstants;
 import org.junit.After;
 import org.junit.Before;
-import org.apache.lucene.analysis.StopAnalyzer;
-import org.apache.lucene.util.Version;
 
 /**
  * @author Emmanuel Bernard
  */
-public abstract class JPATestCase extends junit.framework.TestCase {
+public abstract class JPATestCase {
 	protected EntityManagerFactory factory;
-
-	public JPATestCase() {
-		super();
-	}
-
-	public JPATestCase(String name) {
-		super( name );
-	}
 
 	@Before
 	public void setUp() {
-		factory = new HibernatePersistence().createEntityManagerFactory( getConfig() );
+		factory = Persistence.createEntityManagerFactory( getPersistenceUnitName(), getConfig() );
 	}
 
 	@After
@@ -67,8 +42,12 @@ public abstract class JPATestCase extends junit.framework.TestCase {
 
 	public abstract Class[] getAnnotatedClasses();
 
+	protected String getPersistenceUnitName() {
+		return getClass().getSimpleName() + "PU";
+	}
+
 	public String[] getEjb3DD() {
-		return new String[]{};
+		return new String[] { };
 	}
 
 	public Map<Class, String> getCachedClasses() {
@@ -102,7 +81,7 @@ public abstract class JPATestCase extends junit.framework.TestCase {
 	}
 
 	public Map getConfig() {
-		Map config = loadProperties();
+		Map<Object, Object> config = loadProperties();
 		ArrayList<Class> classes = new ArrayList<Class>();
 
 		classes.addAll( Arrays.asList( getAnnotatedClasses() ) );
@@ -127,7 +106,7 @@ public abstract class JPATestCase extends junit.framework.TestCase {
 
 		//Search config
 		config.put( "hibernate.search.default.directory_provider", "ram" );
-		config.put( org.hibernate.search.Environment.ANALYZER_CLASS, StopAnalyzer.class.getName() );
+		config.put( org.hibernate.search.cfg.Environment.ANALYZER_CLASS, StopAnalyzer.class.getName() );
 		config.put( AvailableSettings.ENTITY_MANAGER_FACTORY_NAME, "Test" + getClass() );
 		configure( config );
 

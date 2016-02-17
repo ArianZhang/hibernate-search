@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.test.query.nullValues;
@@ -29,40 +12,44 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.lucene.document.Document;
-import org.apache.lucene.queryParser.QueryParser;
+import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.Query;
-
 import org.hibernate.Transaction;
-import org.hibernate.cfg.Configuration;
-import org.hibernate.search.Environment;
+import org.hibernate.search.cfg.Environment;
 import org.hibernate.search.FullTextQuery;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
 import org.hibernate.search.annotations.Store;
 import org.hibernate.search.cfg.SearchMapping;
-import org.hibernate.search.test.SearchTestCase;
-import org.hibernate.search.test.TestConstants;
+import org.hibernate.search.test.SearchTestBase;
 import org.hibernate.search.test.query.ProjectionToMapResultTransformer;
+import org.hibernate.search.testsupport.TestConstants;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Tests for indexing and querying {@code null} values. See HSEARCh-115
  *
  * @author Hardy Ferentschik
  */
-public class ProgrammaticIndexAndQueryNullTest extends SearchTestCase {
+public class ProgrammaticIndexAndQueryNullTest extends SearchTestBase {
 
+	@Test
 	public void testProjectedValueGetsConvertedToNull() throws Exception {
 		ProgrammaticConfiguredValue nullValue = new ProgrammaticConfiguredValue( null );
 
 		FullTextSession fullTextSession = Search.getFullTextSession( openSession() );
 		Transaction tx = fullTextSession.beginTransaction();
-		session.save( nullValue );
+		getSession().save( nullValue );
 		tx.commit();
 
 		fullTextSession.clear();
 		tx = fullTextSession.beginTransaction();
 
-		QueryParser parser = new QueryParser( TestConstants.getTargetLuceneVersion(), "id", TestConstants.standardAnalyzer );
+		QueryParser parser = new QueryParser( "id", TestConstants.standardAnalyzer );
 		parser.setAllowLeadingWildcard( true );
 		Query query = parser.parse( "*" );
 		FullTextQuery fullTextQuery = fullTextSession.createFullTextQuery( query, ProgrammaticConfiguredValue.class );
@@ -86,7 +73,7 @@ public class ProgrammaticIndexAndQueryNullTest extends SearchTestCase {
 		assertEquals(
 				"The programmatically configured null value should be in the document",
 				"@null@",
-				doc.getFieldable( "value" ).stringValue()
+				doc.getField( "value" ).stringValue()
 		);
 
 		tx.commit();
@@ -103,12 +90,13 @@ public class ProgrammaticIndexAndQueryNullTest extends SearchTestCase {
 		return mapping;
 	}
 
-	protected void configure(Configuration cfg) {
-		super.configure( cfg );
-		cfg.getProperties().put( Environment.MODEL_MAPPING, createSearchMapping() );
+	@Override
+	public void configure(Map<String,Object> cfg) {
+		cfg.put( Environment.MODEL_MAPPING, createSearchMapping() );
 	}
 
-	protected Class<?>[] getAnnotatedClasses() {
+	@Override
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] {
 				ProgrammaticConfiguredValue.class
 		};

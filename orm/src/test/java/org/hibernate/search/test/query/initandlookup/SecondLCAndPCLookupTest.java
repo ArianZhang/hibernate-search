@@ -1,28 +1,13 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.query.initandlookup;
 
-import static org.fest.assertions.Assertions.assertThat;
-
 import java.util.List;
+import java.util.Map;
 
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
@@ -30,7 +15,6 @@ import org.fest.assertions.Condition;
 import org.hibernate.Hibernate;
 import org.hibernate.Session;
 import org.hibernate.Transaction;
-import org.hibernate.cfg.Configuration;
 import org.hibernate.cfg.Environment;
 import org.hibernate.search.FullTextQuery;
 import org.hibernate.search.FullTextSession;
@@ -38,18 +22,22 @@ import org.hibernate.search.Search;
 import org.hibernate.search.query.DatabaseRetrievalMethod;
 import org.hibernate.search.query.ObjectLookupMethod;
 import org.hibernate.search.query.dsl.QueryBuilder;
-import org.hibernate.search.test.SearchTestCase;
-import org.hibernate.search.test.util.GatedLuceneBackend;
+import org.hibernate.search.test.SearchTestBase;
+import org.hibernate.search.testsupport.backend.GatedLuceneBackend;
 import org.hibernate.stat.Statistics;
 import org.hibernate.testing.cache.CachingRegionFactory;
+import org.junit.Test;
+
+import static org.fest.assertions.Assertions.assertThat;
 
 /**
  * Test second level cache and persistence context lookup methods
  *
- * @author Emmanuel Bernard <emmanuel@hibernate.org>
+ * @author Emmanuel Bernard
  */
-public class SecondLCAndPCLookupTest extends SearchTestCase {
+public class SecondLCAndPCLookupTest extends SearchTestBase {
 
+	@Test
 	public void testQueryWoLookup() throws Exception {
 		Session session = openSession();
 		final Statistics statistics = session.getSessionFactory().getStatistics();
@@ -79,6 +67,7 @@ public class SecondLCAndPCLookupTest extends SearchTestCase {
 		session.close();
 	}
 
+	@Test
 	public void testQueryWith2LCLookup() throws Exception {
 		Session session = openSession();
 		final Statistics statistics = session.getSessionFactory().getStatistics();
@@ -109,6 +98,7 @@ public class SecondLCAndPCLookupTest extends SearchTestCase {
 		session.close();
 	}
 
+	@Test
 	public void testQueryWithPCLookup() throws Exception {
 		Session session = openSession();
 		final Statistics statistics = session.getSessionFactory().getStatistics();
@@ -145,6 +135,7 @@ public class SecondLCAndPCLookupTest extends SearchTestCase {
 		session.close();
 	}
 
+	@Test
 	public void testQueryWithPCAndCacheLookup() throws Exception {
 		Session session = openSession();
 		final Statistics statistics = session.getSessionFactory().getStatistics();
@@ -183,6 +174,7 @@ public class SecondLCAndPCLookupTest extends SearchTestCase {
 		session.close();
 	}
 
+	@Test
 	public void testStaleCacheWithAsyncIndexer() {
 		Session session = openSession();
 		final Statistics statistics = session.getSessionFactory().getStatistics();
@@ -208,6 +200,7 @@ public class SecondLCAndPCLookupTest extends SearchTestCase {
 		assertThat( statistics.getSecondLevelCacheHitCount() ).isEqualTo( 1 );
 	}
 
+	@Test
 	public void testQueryUsingFindByIdInitialization() throws Exception {
 		Session session = openSession();
 		final Statistics statistics = session.getSessionFactory().getStatistics();
@@ -296,15 +289,14 @@ public class SecondLCAndPCLookupTest extends SearchTestCase {
 	}
 
 	@Override
-	protected void configure(Configuration cfg) {
-		super.configure( cfg );
-		cfg.setProperty( Environment.USE_SECOND_LEVEL_CACHE, "true" );
-		cfg.setProperty( "hibernate.search.default.worker.backend", org.hibernate.search.test.util.GatedLuceneBackend.class.getName() );
-		cfg.setProperty( Environment.CACHE_REGION_FACTORY, CachingRegionFactory.class.getCanonicalName() );
+	public void configure(Map<String,Object> cfg) {
+		cfg.put( Environment.USE_SECOND_LEVEL_CACHE, "true" );
+		cfg.put( "hibernate.search.default.worker.backend", GatedLuceneBackend.class.getName() );
+		cfg.put( Environment.CACHE_REGION_FACTORY, CachingRegionFactory.class.getCanonicalName() );
 	}
 
 	@Override
-	protected Class<?>[] getAnnotatedClasses() {
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class<?>[] { Kernel.class };
 	}
 }

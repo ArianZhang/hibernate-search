@@ -1,48 +1,36 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.test.engine;
-
-import org.hibernate.Transaction;
-import org.hibernate.search.FullTextSession;
-import org.hibernate.search.Search;
-import org.hibernate.search.annotations.Field;
-import org.hibernate.search.annotations.FieldBridge;
-import org.hibernate.search.annotations.Indexed;
-import org.hibernate.search.bridge.builtin.ClassBridge;
-import org.hibernate.search.test.SearchTestCase;
 
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.Id;
 import javax.persistence.Table;
 
+import org.hibernate.Transaction;
+
+import org.hibernate.search.FullTextSession;
+import org.hibernate.search.Search;
+import org.hibernate.search.annotations.Field;
+import org.hibernate.search.annotations.FieldBridge;
+import org.hibernate.search.annotations.Indexed;
+import org.hibernate.search.bridge.builtin.EnumBridge;
+import org.hibernate.search.test.SearchTestBase;
+
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
 /**
  * @author Emmanuel Bernard
  */
-public class TransactionSynchronizationTest extends SearchTestCase {
+public class TransactionSynchronizationTest extends SearchTestBase {
 
+	@org.junit.Test
 	public void testProperExceptionPropagation() throws Exception {
 		/**
 		 * This test relies on the fact that a bridge accepting an incompatible type raise
@@ -68,7 +56,7 @@ public class TransactionSynchronizationTest extends SearchTestCase {
 	}
 
 	@Override
-	protected Class<?>[] getAnnotatedClasses() {
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class<?>[] {
 				Test.class
 		};
@@ -78,14 +66,27 @@ public class TransactionSynchronizationTest extends SearchTestCase {
 	@Indexed
 	@Table(name = "Test007")
 	public static class Test {
-		@Id @GeneratedValue
-		public Integer getId() { return id; }
-		public void setId(Integer id) { this.id = id; }
+		@Id
+		@GeneratedValue
+		public Integer getId() {
+			return id;
+		}
+
+		public void setId(Integer id) {
+			this.id = id;
+		}
+
 		private Integer id;
 
-		@Field(bridge = @FieldBridge(impl = ClassBridge.class))
-		public String getIncorrectType() { return incorrectType; }
-		public void setIncorrectType(String incorrectType) { this.incorrectType = incorrectType; }
+		@Field(bridge = @FieldBridge(impl = EnumBridge.class))
+		public String getIncorrectType() {
+			return incorrectType;
+		}
+
+		public void setIncorrectType(String incorrectType) {
+			this.incorrectType = incorrectType;
+		}
+
 		private String incorrectType;
 	}
 }

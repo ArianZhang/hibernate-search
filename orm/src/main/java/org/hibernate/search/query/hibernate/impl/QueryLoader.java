@@ -1,36 +1,22 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.query.hibernate.impl;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 
 import org.hibernate.Criteria;
 import org.hibernate.Session;
-import org.hibernate.annotations.common.AssertionFailure;
+
 import org.hibernate.internal.CriteriaImpl;
-import org.hibernate.search.engine.spi.SearchFactoryImplementor;
+import org.hibernate.search.engine.integration.impl.ExtendedSearchIntegrator;
+import org.hibernate.search.exception.AssertionFailure;
 import org.hibernate.search.query.engine.spi.EntityInfo;
 import org.hibernate.search.query.engine.spi.TimeoutManager;
 
@@ -42,22 +28,23 @@ public class QueryLoader extends AbstractLoader {
 
 	private Session session;
 	private Class entityType;
-	private SearchFactoryImplementor searchFactoryImplementor;
+	private ExtendedSearchIntegrator extendedIntegrator;
 	private Criteria criteria;
 	private boolean isExplicitCriteria;
 	private TimeoutManager timeoutManager;
-	private ObjectsInitializer objectsInitializer;
+	private ObjectInitializer objectInitializer;
 	private boolean sizeSafe = true;
 
+	@Override
 	public void init(Session session,
-					SearchFactoryImplementor searchFactoryImplementor,
-					ObjectsInitializer objectsInitializer,
+			ExtendedSearchIntegrator extendedIntegrator,
+					ObjectInitializer objectInitializer,
 					TimeoutManager timeoutManager) {
-		super.init( session, searchFactoryImplementor );
+		super.init( session, extendedIntegrator );
 		this.session = session;
-		this.searchFactoryImplementor = searchFactoryImplementor;
+		this.extendedIntegrator = extendedIntegrator;
 		this.timeoutManager = timeoutManager;
-		this.objectsInitializer = objectsInitializer;
+		this.objectInitializer = objectInitializer;
 	}
 
 	@Override
@@ -69,6 +56,7 @@ public class QueryLoader extends AbstractLoader {
 		this.entityType = entityType;
 	}
 
+	@Override
 	public final Object executeLoad(EntityInfo entityInfo) {
 		//if explicit criteria, make sure to use it to load the objects
 		if ( isExplicitCriteria ) {
@@ -79,32 +67,47 @@ public class QueryLoader extends AbstractLoader {
 		return result;
 	}
 
+	@Override
 	public final List executeLoad(EntityInfo... entityInfos) {
-		if ( entityInfos.length == 0 ) {
-			return Collections.EMPTY_LIST;
-		}
 		if ( entityType == null ) {
 			throw new AssertionFailure( "EntityType not defined" );
 		}
 
-		objectsInitializer.initializeObjects(
+		if ( entityInfos.length == 0 ) {
+			return Collections.EMPTY_LIST;
+		}
+
+		LinkedHashMap<EntityInfoLoadKey, Object> idToObjectMap = new LinkedHashMap<>( (int) ( entityInfos.length / 0.75 ) + 1 );
+		for ( EntityInfo entityInfo : entityInfos ) {
+			idToObjectMap.put(
+					new EntityInfoLoadKey( entityInfo.getClazz(), entityInfo.getId() ),
+					ObjectInitializer.ENTITY_NOT_YET_INITIALIZED
+			);
+		}
+
+		objectInitializer.initializeObjects(
 				entityInfos,
-				criteria,
-				entityType,
-				searchFactoryImplementor,
-				timeoutManager,
-				session);
-		return ObjectLoaderHelper.returnAlreadyLoadedObjectsInCorrectOrder( entityInfos, session );
+				idToObjectMap,
+				new ObjectInitializationContext( criteria, entityType, extendedIntegrator, timeoutManager, session )
+		);
+
+		ArrayList<Object> result = new ArrayList<>( idToObjectMap.size() );
+		for ( Object o : idToObjectMap.values() ) {
+			if ( o != ObjectInitializer.ENTITY_NOT_YET_INITIALIZED ) {
+				result.add( o );
+			}
+		}
+		return result;
 	}
 
 	public void setCriteria(Criteria criteria) {
-		if (criteria != null) {
+		if ( criteria != null ) {
 			isExplicitCriteria = true;
 			sizeSafe = true;
 			if ( criteria instanceof CriteriaImpl ) {
 				CriteriaImpl impl = (CriteriaImpl) criteria;
-				//restriction of subcriteria => suspect
-				//TODO some subcriteria might be ok (outer joins)
+				//restriction of sub criteria => suspect
+				//TODO some sub criteria might be ok (outer joins)
 				sizeSafe = !impl.iterateExpressionEntries().hasNext() && !impl.iterateSubcriteria().hasNext();
 			}
 		}

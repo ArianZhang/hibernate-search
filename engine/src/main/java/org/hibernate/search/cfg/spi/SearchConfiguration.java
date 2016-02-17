@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.cfg.spi;
 
@@ -29,14 +12,16 @@ import java.util.Properties;
 
 import org.hibernate.annotations.common.reflection.ReflectionManager;
 import org.hibernate.search.cfg.SearchMapping;
+import org.hibernate.search.engine.service.classloading.spi.ClassLoaderService;
+import org.hibernate.search.engine.service.spi.Service;
 import org.hibernate.search.spi.InstanceInitializer;
-import org.hibernate.search.spi.ServiceProvider;
 
 /**
- * Provides configuration to Hibernate Search
+ * Provides configuration to Hibernate Search. This is the entry point for bootstrapping Search.
  *
  * @author Navin Surtani  - navin@surtani.org
  * @author Emmanuel Bernard
+ * @author Hardy Ferentschik
  */
 public interface SearchConfiguration {
 	/**
@@ -48,8 +33,10 @@ public interface SearchConfiguration {
 
 	/**
 	 * Returns a {@link java.lang.Class} from a String parameter.
-	 * @param name
-	 * @return corresponding class instance.
+	 *
+	 * @param name the class name as string
+	 *
+	 * @return corresponding class instance
 	 */
 
 	Class<?> getClassMapping(String name);
@@ -59,6 +46,7 @@ public interface SearchConfiguration {
 	 * or null if not present
 	 *
 	 * @param propertyName - as a String.
+	 *
 	 * @return the property as a String
 	 */
 	String getProperty(String propertyName);
@@ -67,6 +55,7 @@ public interface SearchConfiguration {
 	 * Gets properties as a java.util.Properties object.
 	 *
 	 * @return a java.util.Properties object.
+	 *
 	 * @see java.util.Properties object
 	 */
 	Properties getProperties();
@@ -85,21 +74,18 @@ public interface SearchConfiguration {
 	SearchMapping getProgrammaticMapping();
 
 	/**
-	 * Provide service instances.
+	 * Return the provided services.
 	 *
-	 * Return the provided services (provider and instance at stake)
-	 * These services are passed untouched by Hibernate Search via the
-	 * {@link org.hibernate.search.spi.BuildContext#requestService(Class)} API
-	 *
-	 * Note that the lifecycle methods:
-	 *  - {@link org.hibernate.search.spi.ServiceProvider#start(java.util.Properties)}
-	 *  - {@link org.hibernate.search.spi.ServiceProvider#stop()}
-	 * of the provider are *not* called.
-	 *
-	 * For services using the same ServiceProvider class, provided services have priority
+	 * These services are passed untouched by Hibernate Search. Provided services have priority
 	 * over managed services (ie the ones using the service locator pattern).
+	 * <p>
+	 * Provided services are also not allowed to implement {@link org.hibernate.search.engine.service.spi.Startable} or
+	 * {@link org.hibernate.search.engine.service.spi.Stoppable}. An exception is thrown in this case.
+	 * </p>
+	 *
+	 * @return a map of service roles to service instances
 	 */
-	Map<Class<? extends ServiceProvider<?>>, Object> getProvidedServices();
+	Map<Class<? extends Service>, Object> getProvidedServices();
 
 	/**
 	 * By default Hibernate Search expects to execute in the context of a transaction,
@@ -116,6 +102,18 @@ public interface SearchConfiguration {
 	 */
 	boolean isIndexMetadataComplete();
 
+	/**
+	 * @return {@code true} if regardless of {@code isIndexMetadataComplete} and the number
+	 * of types present in the index it is safe to delete by term given that the underlying
+	 * store guarantees uniqueness of ids
+	 */
+	boolean isDeleteByTermEnforced();
+
+	/**
+	 * Returns the initializer to be used to initialize potentially lazy entities or collections.
+	 *
+	 * @return the initializer to be used to initialize potentially lazy entities or collections.
+	 */
 	InstanceInitializer getInstanceInitializer();
 
 	/**
@@ -125,9 +123,8 @@ public interface SearchConfiguration {
 	boolean isIdProvidedImplicit();
 
 	/**
-	 * @return the component responsible to create IndexManager instances; this might be a custom
-	 * component to allow for different default implementations, custom aliases, different
-	 * classloaders.
+	 * @return Returns a classloader service for this configuration of Search. Access to the service is via the
+	 * {@link org.hibernate.search.engine.service.spi.ServiceManager}
 	 */
-	IndexManagerFactory getIndexManagerFactory();
+	ClassLoaderService getClassLoaderService();
 }

@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.stat;
 
@@ -48,51 +31,56 @@ public interface Statistics {
 
 	/**
 	 * Get the total search time in nanoseconds.
+	 * @return the total search time in nanoseconds.
 	 */
 	long getSearchQueryTotalTime();
 
 	/**
 	 * Get the time in nanoseconds of the slowest search.
+	 * @return the time in nanoseconds of the slowest search.
 	 */
 	long getSearchQueryExecutionMaxTime();
 
 	/**
 	 * Get the average search time in nanoseconds.
+	 * @return the average search time in nanoseconds
 	 */
 	long getSearchQueryExecutionAvgTime();
 
 	/**
 	 * Get the query string for the slowest query.
+	 * @return the query string for the slowest query.
 	 */
 	String getSearchQueryExecutionMaxTimeQueryString();
 
 	/**
-	 * Get the total object loading in nanoseconds.
+	 * @return the total object loading in nanoseconds.
 	 */
 	long getObjectLoadingTotalTime();
 
 	/**
-	 * Get the time in nanoseconds for the slowest object load.
+	 * @return the time in nanoseconds for the slowest object load.
 	 */
 	long getObjectLoadingExecutionMaxTime();
 
 	/**
-	 * Get the average object loading time in nanoseconds.
+	 * @return the average object loading time in nanoseconds.
 	 */
 	long getObjectLoadingExecutionAvgTime();
 
 	/**
-	 * Gets the total number of objects loaded
+	 * @return the total number of objects loaded
 	 */
 	long getObjectsLoadedCount();
 
 	/**
-	 * Are statistics logged
+	 * @return {@code true} if statistics are enabled, {@code false} otherwise
 	 */
 	boolean isStatisticsEnabled();
 
 	/**
 	 * Enable statistics logs (this is a dynamic parameter)
+	 * @param b if {@code true}, it enables the statistics.
 	 */
 	void setStatisticsEnabled(boolean b);
 

@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.engine.impl;
@@ -30,20 +13,23 @@ import java.util.zip.DataFormatException;
 
 import org.apache.lucene.document.CompressionTools;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Fieldable;
-import org.apache.lucene.document.NumericField;
-import org.hibernate.search.SearchException;
+import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.util.BytesRef;
+
+import org.hibernate.search.exception.SearchException;
 import org.hibernate.search.annotations.Store;
 import org.hibernate.search.bridge.FieldBridge;
 import org.hibernate.search.bridge.TwoWayFieldBridge;
 import org.hibernate.search.bridge.spi.ConversionContext;
+import org.hibernate.search.engine.integration.impl.ExtendedSearchIntegrator;
 import org.hibernate.search.engine.metadata.impl.DocumentFieldMetadata;
 import org.hibernate.search.engine.metadata.impl.EmbeddedTypeMetadata;
 import org.hibernate.search.engine.metadata.impl.PropertyMetadata;
 import org.hibernate.search.engine.metadata.impl.TypeMetadata;
+import org.hibernate.search.engine.service.classloading.spi.ClassLoadingException;
+import org.hibernate.search.engine.service.spi.ServiceManager;
 import org.hibernate.search.engine.spi.DocumentBuilderIndexedEntity;
-import org.hibernate.search.engine.spi.EntityIndexBinder;
-import org.hibernate.search.engine.spi.SearchFactoryImplementor;
+import org.hibernate.search.engine.spi.EntityIndexBinding;
 import org.hibernate.search.util.impl.ClassLoaderHelper;
 import org.hibernate.search.util.logging.impl.Log;
 import org.hibernate.search.util.logging.impl.LoggerFactory;
@@ -60,19 +46,18 @@ public final class DocumentBuilderHelper {
 	private DocumentBuilderHelper() {
 	}
 
-	public static Class getDocumentClass(String className) {
+	public static Class<?> getDocumentClass(String className, ServiceManager serviceManager) {
 		try {
-			// Use the same class loader used to load this class ...
-			return ClassLoaderHelper.classForName( className, DocumentBuilderHelper.class.getClassLoader() );
+			return ClassLoaderHelper.classForName( className, serviceManager );
 		}
-		catch ( ClassNotFoundException e ) {
+		catch (ClassLoadingException e) {
 			throw new SearchException( "Unable to load indexed class: " + className, e );
 		}
 	}
 
-	public static Serializable getDocumentId(SearchFactoryImplementor searchFactoryImplementor, Class<?> clazz, Document document, ConversionContext conversionContext) {
-		final DocumentBuilderIndexedEntity<?> builderIndexedEntity = getDocumentBuilder(
-				searchFactoryImplementor,
+	public static Serializable getDocumentId(ExtendedSearchIntegrator extendedIntegrator, Class<?> clazz, Document document, ConversionContext conversionContext) {
+		final DocumentBuilderIndexedEntity builderIndexedEntity = getDocumentBuilder(
+				extendedIntegrator,
 				clazz
 		);
 		final TwoWayFieldBridge fieldBridge = builderIndexedEntity.getIdBridge();
@@ -89,13 +74,13 @@ public final class DocumentBuilderHelper {
 		}
 	}
 
-	public static String getDocumentIdName(SearchFactoryImplementor searchFactoryImplementor, Class<?> clazz) {
-		DocumentBuilderIndexedEntity<?> documentBuilder = getDocumentBuilder( searchFactoryImplementor, clazz );
+	public static String getDocumentIdName(ExtendedSearchIntegrator extendedIntegrator, Class<?> clazz) {
+		DocumentBuilderIndexedEntity documentBuilder = getDocumentBuilder( extendedIntegrator, clazz );
 		return documentBuilder.getIdentifierName();
 	}
 
-	public static Object[] getDocumentFields(SearchFactoryImplementor searchFactoryImplementor, Class<?> clazz, Document document, String[] fields, ConversionContext conversionContext) {
-		DocumentBuilderIndexedEntity<?> builderIndexedEntity = getDocumentBuilder( searchFactoryImplementor, clazz );
+	public static Object[] getDocumentFields(ExtendedSearchIntegrator extendedIntegrator, Class<?> clazz, Document document, String[] fields, ConversionContext conversionContext) {
+		DocumentBuilderIndexedEntity builderIndexedEntity = getDocumentBuilder( extendedIntegrator, clazz );
 		final int fieldNbr = fields.length;
 		Object[] result = new Object[fieldNbr];
 		Arrays.fill( result, NOT_SET );
@@ -122,8 +107,7 @@ public final class DocumentBuilderHelper {
 			}
 		}
 
-		final TypeMetadata metadata = builderIndexedEntity.getMetadata();
-		processFieldsForProjection( metadata, fields, result, document, conversionContext );
+		processFieldsForProjection( builderIndexedEntity, fields, result, document, conversionContext );
 		return result;
 	}
 
@@ -153,27 +137,49 @@ public final class DocumentBuilderHelper {
 		}
 	}
 
-	private static void processFieldsForProjection(TypeMetadata typeMetadata, String[] fields, Object[] result, Document document, ConversionContext contextualBridge) {
-		//process base fields
-		for ( PropertyMetadata propertyMetadata : typeMetadata.getPropertyMetadata() ) {
-			DocumentFieldMetadata fieldMetadata = propertyMetadata.getFieldMetadata();
-			final String fieldName = fieldMetadata.getName();
-			int matchingPosition = getFieldPosition( fields, fieldName );
-			if ( matchingPosition != -1 ) {
-				contextualBridge.pushProperty( fieldName );
-				try {
-					populateResult(
-							fieldName,
-							fieldMetadata.getFieldBridge(),
-							fieldMetadata.getStore(),
-							result,
-							document,
-							contextualBridge,
-							matchingPosition
-					);
+	private static void processFieldsForProjection(DocumentBuilderIndexedEntity builderIndexedEntity, String[] fields, Object[] result, Document document, ConversionContext conversionContext) {
+		final TypeMetadata metadata = builderIndexedEntity.getMetadata();
+
+		//First try setting each projected field considering mapping metadata to apply (inverse) field bridges:
+		processMetadataRecursivelyForProjections( metadata, fields, result, document, conversionContext );
+
+		//If we still didn't know the value using any bridge, return the raw value or string:
+		//Important: make sure this happens as last step of projections! See also HSEARCH-1786
+		for ( int index = 0; index < result.length; index++ ) {
+			if ( result[index] == NOT_SET ) {
+				result[index] = null; // make sure we never return NOT_SET
+				if ( document != null ) {
+					IndexableField field = document.getField( fields[index] );
+					if ( field != null ) {
+						result[index] = extractObjectFromFieldable( field );
+					}
 				}
-				finally {
-					contextualBridge.popProperty();
+			}
+		}
+	}
+
+	private static void processMetadataRecursivelyForProjections(TypeMetadata typeMetadata, String[] fields, Object[] result, Document document, ConversionContext contextualBridge) {
+		//process base fields
+		for ( PropertyMetadata propertyMetadata : typeMetadata.getAllPropertyMetadata() ) {
+			for ( DocumentFieldMetadata fieldMetadata : propertyMetadata.getFieldMetadataSet() ) {
+				final String fieldName = fieldMetadata.getName();
+				int matchingPosition = getFieldPosition( fields, fieldName );
+				if ( matchingPosition != -1 && result[matchingPosition] == NOT_SET ) {
+					contextualBridge.pushProperty( fieldName );
+					try {
+						populateResult(
+								fieldName,
+								fieldMetadata.getFieldBridge(),
+								fieldMetadata.getStore(),
+								result,
+								document,
+								contextualBridge,
+								matchingPosition
+						);
+					}
+					finally {
+						contextualBridge.popProperty();
+					}
 				}
 			}
 		}
@@ -184,7 +190,7 @@ public final class DocumentBuilderHelper {
 			if ( embeddedTypeMetadata.getEmbeddedContainer() == EmbeddedTypeMetadata.Container.OBJECT ) {
 				contextualBridge.pushProperty( embeddedTypeMetadata.getEmbeddedFieldName() );
 				try {
-					processFieldsForProjection(
+					processMetadataRecursivelyForProjections(
 							embeddedTypeMetadata, fields, result, document, contextualBridge
 					);
 				}
@@ -197,7 +203,7 @@ public final class DocumentBuilderHelper {
 		//process class bridges
 		for ( DocumentFieldMetadata fieldMetadata : typeMetadata.getClassBridgeMetadata() ) {
 			int matchingPosition = getFieldPosition( fields, fieldMetadata.getName() );
-			if ( matchingPosition != -1 ) {
+			if ( matchingPosition != -1 && result[matchingPosition] == NOT_SET ) {
 				populateResult(
 						fieldMetadata.getName(),
 						fieldMetadata.getFieldBridge(),
@@ -209,36 +215,39 @@ public final class DocumentBuilderHelper {
 				);
 			}
 		}
-
-		//If we still didn't know the value using any bridge, return the raw value or string:
-		for ( int index = 0; index < result.length; index++ ) {
-			if ( result[index] == NOT_SET ) {
-				result[index] = null; // make sure we never return NOT_SET
-				if ( document != null ) {
-					Fieldable field = document.getFieldable( fields[index] );
-					if ( field != null ) {
-						result[index] = extractObjectFromFieldable( field );
-					}
-				}
-			}
-		}
 	}
 
-	public static Object extractObjectFromFieldable(Fieldable field) {
-		if ( field instanceof NumericField ) {
-			return NumericField.class.cast( field ).getNumericValue();
+	/**
+	 * @deprecated we should know the projection rules from the metadata rather than guess from the field properties
+	 * @param field the field
+	 * @return the object
+	 */
+	@Deprecated
+	public static Object extractObjectFromFieldable(IndexableField field) {
+		//TODO remove this guess work
+		final Number numericValue = field.numericValue();
+		if ( numericValue != null ) {
+			return numericValue;
 		}
 		else {
 			return extractStringFromFieldable( field );
 		}
 	}
 
-	public static String extractStringFromFieldable(Fieldable field) {
-		if ( field.isBinary() ) {
+	/**
+	 * @deprecated we should know the projection rules from the metadata rather than guess from the field properties
+	 * @param field the field to decompress
+	 * @return the decompressed field
+	 */
+	@Deprecated
+	public static String extractStringFromFieldable(IndexableField field) {
+		final BytesRef binaryValue = field.binaryValue();
+		//TODO remove this guess work
+		if ( binaryValue != null ) {
 			try {
-				return CompressionTools.decompressString( field.getBinaryValue() );
+				return CompressionTools.decompressString( binaryValue );
 			}
-			catch ( DataFormatException e ) {
+			catch (DataFormatException e) {
 				throw log.fieldLooksBinaryButDecompressionFailed( field.name() );
 			}
 		}
@@ -257,8 +266,8 @@ public final class DocumentBuilderHelper {
 		return -1;
 	}
 
-	private static DocumentBuilderIndexedEntity<?> getDocumentBuilder(SearchFactoryImplementor searchFactoryImplementor, Class<?> clazz) {
-		EntityIndexBinder entityIndexBinding = searchFactoryImplementor.getIndexBindingForEntity(
+	private static DocumentBuilderIndexedEntity getDocumentBuilder(ExtendedSearchIntegrator extendedIntegrator, Class<?> clazz) {
+		EntityIndexBinding entityIndexBinding = extendedIntegrator.getIndexBinding(
 				clazz
 		);
 		if ( entityIndexBinding == null ) {

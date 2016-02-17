@@ -1,33 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Hibernate, Relational Persistence for Idiomatic Java
-  ~
-  ~  Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
-  ~  indicated by the @author tags or express copyright attribution
-  ~  statements applied by the authors.  All third-party contributions are
-  ~  distributed under license by Red Hat, Inc.
-  ~
-  ~  This copyrighted material is made available to anyone wishing to use, modify,
-  ~  copy, or redistribute it subject to the terms and conditions of the GNU
-  ~  Lesser General Public License, as published by the Free Software Foundation.
-  ~
-  ~  This program is distributed in the hope that it will be useful,
-  ~  but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-  ~  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
-  ~  for more details.
-  ~
-  ~  You should have received a copy of the GNU Lesser General Public License
-  ~  along with this distribution; if not, write to:
-  ~  Free Software Foundation, Inc.
-  ~  51 Franklin Street, Fifth Floor
-  ~  Boston, MA  02110-1301  USA
+ ~ Hibernate Search, full-text search for your domain model
+ ~
+ ~ License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ ~ See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
   -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.hibernate</groupId>
     <artifactId>hibernate-search-parent</artifactId>
-    <version>4.4.0-SNAPSHOT</version>
+    <version>5.6.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Hibernate Search Aggregator</name>
@@ -37,15 +20,25 @@
     <inceptionYear>2006</inceptionYear>
 
     <modules>
+        <module>build-config</module>
         <module>legacy</module>
         <module>engine</module>
+        <module>serialization/avro</module>
+        <module>backends/jgroups</module>
+        <module>backends/jms</module>
+        <module>elasticsearch</module>
         <module>orm</module>
-        <module>analyzers</module>
         <module>testing</module>
         <module>infinispan</module>
         <module>modules</module>
-        <module>integrationtest/as</module>
+        <module>integrationtest/jms</module>
+        <module>integrationtest/narayana</module>
         <module>integrationtest/spring</module>
+        <module>integrationtest/wildfly</module>
+        <module>integrationtest/performance</module>
+        <module>integrationtest/osgi/karaf-features</module>
+        <module>integrationtest/sandbox</module>
+        <module>integrationtest/engine-performance</module>
     </modules>
 
     <issueManagement>
@@ -57,6 +50,7 @@
         <connection>scm:git:git://github.com/hibernate/hibernate-search.git</connection>
         <developerConnection>scm:git:git@github.com:hibernate/hibernate-search.git</developerConnection>
         <url>http://github.com/hibernate/hibernate-search</url>
+      <tag>HEAD</tag>
     </scm>
 
     <organization>
@@ -96,6 +90,12 @@
             <email>sanne@hibernate.org</email>
             <url>http://in.relation.to/Bloggers/Sanne</url>
         </developer>
+        <developer>
+            <id>gunnarmorling</id>
+            <name>Gunnar Morling</name>
+            <email>gunnar@hibernate.org</email>
+            <url>http://in.relation.to/Bloggers/Gunnar</url>
+        </developer>
     </developers>
 
     <mailingLists>
@@ -133,33 +133,68 @@
     </mailingLists>
 
     <prerequisites>
-        <maven>3.0.4</maven>
+        <maven>3.2.3</maven>
     </prerequisites>
 
     <properties>
+        <!-- JDK version required for the build; we still create 1.7 byte code -->
+        <minJdkVersion>1.8</minJdkVersion>
+
+        <!-- Slot definitions for JBoss Modules (both generated and consumed modules) -->
+        <lucene.module.slot>5.4</lucene.module.slot>
+
+        <!-- Dependency versions -->
+        <slf4jVersion>1.6.4</slf4jVersion>
+        <luceneVersion>5.4.1</luceneVersion>
+        <infinispanVersion>8.1.0.Final</infinispanVersion>
+        <jgroupsVersion>3.6.6.Final</jgroupsVersion>
+
+        <!-- ORM and transitive deps; Make sure to match ORM's set of versions when updating -->
+        <hibernateVersion>5.0.6.Final</hibernateVersion>
+        <hibernateCommonsAnnotationVersion>5.0.1.Final</hibernateCommonsAnnotationVersion>
+        <jandexVersion>2.0.0.Final</jandexVersion>
+        <classMateVersion>1.1.0</classMateVersion>
+        <javassistVersion>3.18.1-GA</javassistVersion>
+
+        <!-- OSGi ranges for some primary dependencies -->
+        <!-- Warning:
+            Ranges are maintained as best effort on our knowledge but only the
+            exact versions in this pom are being tested.
+            Essentially we allow older versions when we know no changes were necessary when we upgraded the dependency. -->
+        <luceneOsgiRangeVersion>[5.3.0,5.5.0)</luceneOsgiRangeVersion>
+        <hibernateOrmOsgiRangeVersion>[5.0.0,5.1.0)</hibernateOrmOsgiRangeVersion>
+        <hibernateHcannOsgiRangeVersion>[5,6)</hibernateHcannOsgiRangeVersion>
+        <jGroupsOsgiRangeVersion>[3.6.0,4)</jGroupsOsgiRangeVersion>
+        <jbossLoggingOsgiRangeVersion>[3.3,4.0.0)</jbossLoggingOsgiRangeVersion>
+
+        <tikaVersion>1.4</tikaVersion>
+        <bytemanVersion>3.0.2</bytemanVersion>
+        <jbossLoggingVersion>3.3.0.Final</jbossLoggingVersion>
+        <jbossLoggingProcessorVersion>2.0.0.Final</jbossLoggingProcessorVersion>
+        <narayanaVersion>5.2.9.Final</narayanaVersion>
+        <avroVersion>1.7.6</avroVersion>
+        <jacksonAslVersion>1.9.13</jacksonAslVersion>
+        <commonsCompressVersion>1.5</commonsCompressVersion>
+        <commonsIoVersion>2.1</commonsIoVersion>
+        <jbossTransactionApiVersion>1.0.0.Final</jbossTransactionApiVersion>
+        <commonsLoggingVersion>1.1.1</commonsLoggingVersion>
+        <activeMQVersion>5.8.0</activeMQVersion>
+        <commonsLangVersion>2.6</commonsLangVersion>
+
+        <!-- Integration tests -->
+        <arquillianVersion>1.1.8.Final</arquillianVersion>
+        <arquillianContainerVersion>1.0.0.Final</arquillianContainerVersion>
+        <shrinkwrapResolverVersion>2.0.0</shrinkwrapResolverVersion>
+        <wildflyVersion>10.0.0.Final</wildflyVersion>
+        <jmhVersion>1.11.2</jmhVersion>
+
+        <!-- character encoding -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <slf4jVersion>1.6.1</slf4jVersion>
-        <luceneVersion>3.6.2</luceneVersion>
-        <luceneRegexVersion>3.0.3</luceneRegexVersion>
-        <luceneRegexJakartaVersion>1.4</luceneRegexJakartaVersion>
-        <infinispanVersion>5.2.5.Final</infinispanVersion>
-        <jgroupsVersion>3.2.8.Final</jgroupsVersion>
-        <hibernateVersion>4.2.2.Final</hibernateVersion>
-        <hibernateCommonsAnnotationVersion>4.0.2.Final</hibernateCommonsAnnotationVersion>
-        <tikaVersion>1.1</tikaVersion>
-        <bytemanVersion>2.1.0</bytemanVersion>
-        <jbossLoggingVersion>3.1.0.GA</jbossLoggingVersion>
-        <jbossLoggingProcessorVersion>1.0.3.Final</jbossLoggingProcessorVersion>
-        <narayanaVersion>4.17.4.Final</narayanaVersion>
-        <avroVersion>1.6.3</avroVersion>
-        <jacksonAslVersion>1.9.2</jacksonAslVersion>
-        <commonsIoVersion>1.4</commonsIoVersion>
-        <commonsCodecVersion>1.5</commonsCodecVersion>
-        <commonsLangVersion>2.6</commonsLangVersion>
-        <!-- Used in the hibernate-search-modules project -->
-        <paranamerVersion>2.3</paranamerVersion>
-        <snappyVersion>1.0.4.1</snappyVersion>
+
+        <!-- Eclipse plugin options -->
+        <m2e.apt.activation>jdt_apt</m2e.apt.activation>
+
     </properties>
 
     <dependencyManagement>
@@ -170,14 +205,19 @@
                 <version>${hibernateVersion}</version>
             </dependency>
             <dependency>
+                <groupId>org.hibernate</groupId>
+                <artifactId>hibernate-infinispan</artifactId>
+                <version>${hibernateVersion}</version>
+            </dependency>
+            <dependency>
                 <groupId>org.hibernate.common</groupId>
                 <artifactId>hibernate-commons-annotations</artifactId>
                 <version>${hibernateCommonsAnnotationVersion}</version>
             </dependency>
             <dependency>
                 <groupId>org.hibernate.javax.persistence</groupId>
-                <artifactId>hibernate-jpa-2.0-api</artifactId>
-                <version>1.0.1.Final</version>
+                <artifactId>hibernate-jpa-2.1-api</artifactId>
+                <version>1.0.0.Final</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.lucene</groupId>
@@ -186,8 +226,34 @@
             </dependency>
             <dependency>
                 <groupId>org.apache.lucene</groupId>
-                <artifactId>lucene-regex</artifactId>
-                <version>${luceneRegexVersion}</version>
+                <artifactId>lucene-backward-codecs</artifactId>
+                <version>${luceneVersion}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.lucene</groupId>
+                <artifactId>lucene-misc</artifactId>
+                <version>${luceneVersion}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.lucene</groupId>
+                <artifactId>lucene-analyzers-common</artifactId>
+                <version>${luceneVersion}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.lucene</groupId>
+                <artifactId>lucene-queryparser</artifactId>
+                <version>${luceneVersion}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.apache.lucene</groupId>
+                        <artifactId>lucene-sandbox</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.lucene</groupId>
+                <artifactId>lucene-analyzers-phonetic</artifactId>
+                <version>${luceneVersion}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.lucene</groupId>
@@ -203,33 +269,134 @@
                 <groupId>org.apache.tika</groupId>
                 <artifactId>tika-parsers</artifactId>
                 <version>${tikaVersion}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.gagravarr</groupId>
+                        <artifactId>vorbis-java-tika</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>edu.ucar</groupId>
+                        <artifactId>netcdf</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.james</groupId>
+                        <artifactId>apache-mime4j-core</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.james</groupId>
+                        <artifactId>apache-mime4j-dom</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.commons</groupId>
+                        <artifactId>commons-compress</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>commons-codec</groupId>
+                        <artifactId>commons-codec</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.pdfbox</groupId>
+                        <artifactId>pdfbox</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.poi</groupId>
+                        <artifactId>poi</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.poi</groupId>
+                        <artifactId>poi-scratchpad</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.poi</groupId>
+                        <artifactId>poi-ooxml</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.bouncycastle</groupId>
+                        <artifactId>bcmail-jdk15</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.bouncycastle</groupId>
+                        <artifactId>bcprov-jdk15</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.geronimo.specs</groupId>
+                        <artifactId>geronimo-stax-api_1.0_spec</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.ccil.cowan.tagsoup</groupId>
+                        <artifactId>tagsoup</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.ow2.asm</groupId>
+                        <artifactId>asm-debug-all</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>com.googlecode.mp4parser</groupId>
+                        <artifactId>isoparser</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>com.drewnoakes</groupId>
+                        <artifactId>metadata-extractor</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>de.l3s.boilerpipe</groupId>
+                        <artifactId>boilerpipe</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>rome</groupId>
+                        <artifactId>rome</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.gagravarr</groupId>
+                        <artifactId>vorbis-java-core</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>com.googlecode.juniversalchardet</groupId>
+                        <artifactId>juniversalchardet</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-core</artifactId>
+                <version>${tikaVersion}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.pdfbox</groupId>
+                <artifactId>pdfbox</artifactId>
+                <version>1.8.1</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.avro</groupId>
                 <artifactId>avro</artifactId>
                 <version>${avroVersion}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.xerial.snappy</groupId>
+                        <artifactId>snappy-java</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.tukaani</groupId>
+                        <artifactId>xz</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
             <dependency>
-                <!-- To force testing of Apache Avro integration with the version of Jackson used in AS 7.1 -->
+                <!-- To force testing of Apache Avro integration with the version of Jackson used in WildFly -->
                 <groupId>org.codehaus.jackson</groupId>
                 <artifactId>jackson-core-asl</artifactId>
                 <version>${jacksonAslVersion}</version>
             </dependency>
             <dependency>
-                <!-- To force testing of Apache Avro integration with the version of Jackson used in AS 7.1 -->
+                <!-- To force testing of Apache Avro integration with the version of Jackson used in WildFly -->
                 <groupId>org.codehaus.jackson</groupId>
                 <artifactId>jackson-mapper-asl</artifactId>
                 <version>${jacksonAslVersion}</version>
             </dependency>
             <dependency>
-                <groupId>org.hibernate</groupId>
-                <artifactId>hibernate-search-analyzers</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>commons-codec</groupId>
-                <artifactId>commons-codec</artifactId>
-                <version>${commonsCodecVersion}</version>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-compress</artifactId>
+                <version>${commonsCompressVersion}</version>
             </dependency>
             <dependency>
                 <groupId>commons-io</groupId>
@@ -237,25 +404,86 @@
                 <version>${commonsIoVersion}</version>
             </dependency>
             <dependency>
-                <groupId>javax.transaction</groupId>
-                <artifactId>jta</artifactId>
-                <version>1.1</version>
-                <scope>provided</scope>
+                <groupId>commons-lang</groupId>
+                <artifactId>commons-lang</artifactId>
+                <version>${commonsLangVersion}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.hibernate</groupId>
+                <artifactId>hibernate-search-serialization-avro</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.hibernate</groupId>
+                <artifactId>hibernate-search-backend-jms</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.hibernate</groupId>
+                <artifactId>hibernate-search-backend-jgroups</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.hibernate</groupId>
+                <artifactId>hibernate-search-infinispan</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+             <dependency>
+                <groupId>org.hibernate</groupId>
+                <artifactId>hibernate-search-orm</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.hibernate</groupId>
+                <artifactId>hibernate-search-orm</artifactId>
+                <type>test-jar</type>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.hibernate</groupId>
+                <artifactId>hibernate-search-engine</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.hibernate</groupId>
+                <artifactId>hibernate-search-engine</artifactId>
+                <type>test-jar</type>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.hibernate</groupId>
+                <artifactId>hibernate-search-testing</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.hibernate</groupId>
+                <artifactId>hibernate-search-documentation</artifactId>
+                <type>pom</type>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.hibernate</groupId>
+                <artifactId>hibernate-search-backend-elasticsearch</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>commons-logging</groupId>
+                <artifactId>commons-logging</artifactId>
+                <version>${commonsLoggingVersion}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.activemq</groupId>
-                <artifactId>activemq-core</artifactId>
-                <version>5.3.0</version>
-                <exclusions>
-                    <exclusion>
-                        <groupId>commons-logging</groupId>
-                        <artifactId>commons-logging</artifactId>
-                    </exclusion>
-                </exclusions>
+                <artifactId>activemq-broker</artifactId>
+                <version>${activeMQVersion}</version>
             </dependency>
             <dependency>
                 <groupId>org.hibernate</groupId>
                 <artifactId>hibernate-entitymanager</artifactId>
+                <version>${hibernateVersion}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.hibernate</groupId>
+                <artifactId>hibernate-envers</artifactId>
                 <version>${hibernateVersion}</version>
             </dependency>
             <dependency>
@@ -275,17 +503,16 @@
                         <groupId>com.experlog</groupId>
                         <artifactId>xapool</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.geronimo.specs</groupId>
+                      <artifactId>geronimo-jta_1.1_spec</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
             <dependency>
-                <groupId>org.apache.lucene</groupId>
-                <artifactId>lucene-analyzers</artifactId>
-                <version>${luceneVersion}</version>
-            </dependency>
-            <dependency>
-                <groupId>javax.jms</groupId>
-                <artifactId>jms</artifactId>
-                <version>1.1</version>
+                <groupId>org.jboss.spec.javax.jms</groupId>
+                <artifactId>jboss-jms-api_2.0_spec</artifactId>
+                <version>1.0.0.Final</version>
             </dependency>
             <dependency>
                 <groupId>org.jgroups</groupId>
@@ -293,14 +520,24 @@
                 <version>${jgroupsVersion}</version>
             </dependency>
             <dependency>
-                <groupId>javax.annotation</groupId>
-                <artifactId>jsr250-api</artifactId>
-                <version>1.0</version>
+                <groupId>org.jboss.spec.javax.annotation</groupId>
+                <artifactId>jboss-annotations-api_1.2_spec</artifactId>
+                <version>1.0.0.Final</version>
             </dependency>
             <dependency>
                 <groupId>junit</groupId>
                 <artifactId>junit</artifactId>
-                <version>4.8.2</version>
+                <version>4.11</version>
+            </dependency>
+            <dependency>
+                <groupId>org.easymock</groupId>
+                <artifactId>easymock</artifactId>
+                <version>2.4</version>
+            </dependency>
+            <dependency>
+                <groupId>org.unitils</groupId>
+                <artifactId>unitils-easymock</artifactId>
+                <version>3.3</version>
             </dependency>
             <dependency>
                 <groupId>simple-jndi</groupId>
@@ -311,11 +548,6 @@
                 <groupId>org.easytesting</groupId>
                 <artifactId>fest-assert</artifactId>
                 <version>1.4</version>
-            </dependency>
-            <dependency>
-                <groupId>javassist</groupId>
-                <artifactId>javassist</artifactId>
-                <version>3.12.1.GA</version>
             </dependency>
             <!--
             We need to keep the slf4j dependencies listed here even though we are not using slf4j anymore.
@@ -332,10 +564,6 @@
                 <artifactId>slf4j-log4j12</artifactId>
                 <version>${slf4jVersion}</version>
             </dependency>
-            <!--
-            Defining log4j here, but due to a bug in Shrinkwrap we still need to define the version explicitly
-            in the sub modules. See HSEARCH-970
-            -->
             <dependency>
                 <groupId>log4j</groupId>
                 <artifactId>log4j</artifactId>
@@ -347,9 +575,16 @@
                 <version>${jbossLoggingVersion}</version>
             </dependency>
             <dependency>
+                <groupId>org.jboss.logging</groupId>
+                <artifactId>jboss-logging-annotations</artifactId>
+                <version>${jbossLoggingProcessorVersion}</version>
+                <scope>provided</scope>
+                <optional>true</optional>
+            </dependency>
+            <dependency>
                 <groupId>com.h2database</groupId>
                 <artifactId>h2</artifactId>
-                <version>1.3.154</version>
+                <version>1.4.178</version>
             </dependency>
             <dependency>
                 <groupId>org.jboss.byteman</groupId>
@@ -373,174 +608,59 @@
                 <version>${bytemanVersion}</version>
             </dependency>
             <dependency>
-                <groupId>org.jboss.jbossts.jta</groupId>
+                <groupId>org.jboss.narayana.jta</groupId>
                 <artifactId>narayana-jta</artifactId>
                 <version>${narayanaVersion}</version>
                 <exclusions>
                     <exclusion>
-                        <groupId>org.jboss.ws.native</groupId>
-                        <artifactId>jbossws-native-core</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.jboss.byteman</groupId>
                         <artifactId>byteman</artifactId>
-                    </exclusion>
-                    <exclusion>
                         <groupId>org.jboss.byteman</groupId>
+                    </exclusion>
+                    <exclusion>
                         <artifactId>byteman-submit</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <artifactId>emma</artifactId>
-                        <groupId>emma</groupId>
-                    </exclusion>
-                    <exclusion>
-                        <artifactId>emma_ant</artifactId>
-                        <groupId>emma</groupId>
-                    </exclusion>
-                    <exclusion>
-                        <artifactId>hornetq-core</artifactId>
-                        <groupId>org.hornetq</groupId>
+                        <groupId>org.jboss.byteman</groupId>
                     </exclusion>
                     <exclusion>
                         <artifactId>hornetq-journal</artifactId>
                         <groupId>org.hornetq</groupId>
                     </exclusion>
                     <exclusion>
+                        <artifactId>jboss-logmanager</artifactId>
+                        <groupId>org.jboss.logmanager</groupId>
+                    </exclusion>
+                    <exclusion>
                         <artifactId>hornetq-commons</artifactId>
                         <groupId>org.hornetq</groupId>
-                    </exclusion>
-                    <exclusion>
-                        <artifactId>netty</artifactId>
-                        <groupId>io.netty</groupId>
-                    </exclusion>
-                    <exclusion>
-                        <artifactId>wrapper</artifactId>
-                        <groupId>tanukisoft</groupId>
-                    </exclusion>
-                    <exclusion>
-                        <artifactId>jacorb</artifactId>
-                        <groupId>jacorb</groupId>
                     </exclusion>
                     <exclusion>
                         <artifactId>jfreechart</artifactId>
                         <groupId>jfree</groupId>
                     </exclusion>
                     <exclusion>
-                        <artifactId>jboss-corba-ots-spi</artifactId>
-                        <groupId>org.jboss.integration</groupId>
-                    </exclusion>
-                    <exclusion>
-                        <artifactId>jboss-server-manager</artifactId>
-                        <groupId>org.jboss.jbossas</groupId>
-                    </exclusion>
-                    <exclusion>
-                        <artifactId>jboss-ejb-api_3.1_spec</artifactId>
-                        <groupId>org.jboss.spec.javax.ejb</groupId>
-                    </exclusion>
-                    <exclusion>
-                        <artifactId>jnp-client</artifactId>
-                        <groupId>org.jboss.naming</groupId>
-                    </exclusion>
-                    <exclusion>
-                        <artifactId>jboss-servlet-api_3.0_spec</artifactId>
-                        <groupId>org.jboss.spec.javax.servlet</groupId>
-                    </exclusion>
-                    <exclusion>
-                        <artifactId>jbossws-common</artifactId>
-                        <groupId>org.jboss.ws</groupId>
-                    </exclusion>
-                    <exclusion>
-                        <artifactId>jcl-over-slf4j</artifactId>
-                        <groupId>org.slf4j</groupId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.jboss.logging</groupId>
-                        <artifactId>jboss-logging-processor</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.jboss.logging</groupId>
-                        <artifactId>jboss-logging-generator</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.jboss.logmanager</groupId>
-                        <artifactId>jboss-logmanager</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>jfree</groupId>
                         <artifactId>jcommon</artifactId>
+                        <groupId>jfree</groupId>
+                    </exclusion>
+                    <exclusion>
+                        <artifactId>jboss-interceptors-api_1.2_spec</artifactId>
+                        <groupId>org.jboss.spec.javax.interceptor</groupId>
                     </exclusion>
                 </exclusions>
             </dependency>
             <dependency>
-                <groupId>org.apache.solr</groupId>
-                <artifactId>solr-analysis-extras</artifactId>
-                <version>${luceneVersion}</version>
-                <exclusions>
-                    <exclusion>
-                        <groupId>com.google.guava</groupId>
-                        <artifactId>guava</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.apache.solr</groupId>
-                        <artifactId>solr-noggit</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.apache.geronimo.specs</groupId>
-                        <artifactId>geronimo-stax-api_1.0_spec</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.mortbay.jetty</groupId>
-                        <artifactId>jetty</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>commons-httpclient</groupId>
-                        <artifactId>commons-httpclient</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>commons-fileupload</groupId>
-                        <artifactId>commons-fileupload</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.apache.velocity</groupId>
-                        <artifactId>velocity</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.apache.velocity</groupId>
-                        <artifactId>velocity-tools</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.mortbay.jetty</groupId>
-                        <artifactId>jetty-util</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.slf4j</groupId>
-                        <artifactId>slf4j-jdk14</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.apache.lucene</groupId>
-                        <artifactId>lucene-icu</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.apache.lucene</groupId>
-                        <artifactId>lucene-queries</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.apache.zookeeper</groupId>
-                        <artifactId>zookeeper</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.codehaus.woodstox</groupId>
-                        <artifactId>wstx-asl</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.slf4j</groupId>
-                        <artifactId>jcl-over-slf4j</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>javax.servlet</groupId>
-                        <artifactId>servlet-api</artifactId>
-                    </exclusion>
-                </exclusions>
+                <groupId>org.jboss.spec.javax.transaction</groupId>
+                <artifactId>jboss-transaction-api_1.2_spec</artifactId>
+                <version>${jbossTransactionApiVersion}</version>
+            </dependency>
+            <!-- Manage version of xml-apis to have dom4j and Tika requirements converge -->
+            <dependency>
+                <groupId>xml-apis</groupId>
+                <artifactId>xml-apis</artifactId>
+                <version>1.3.03</version>
+            </dependency>
+            <dependency>
+                <groupId>io.takari.junit</groupId>
+                <artifactId>takari-cpsuite</artifactId>
+                <version>1.2.7</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -553,12 +673,41 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
                     <showWarnings>true</showWarnings>
-                    <source>1.6</source>
-                    <target>1.6</target>
+                    <source>1.7</source>
+                    <target>1.7</target>
                     <encoding>UTF-8</encoding>
                     <!-- needed because of compiler bug: http://bugs.sun.com/view_bug.do?bug_id=6512707 -->
                     <proc>none</proc>
                 </configuration>
+            </plugin>
+            <plugin>
+               <groupId>com.github.marschall</groupId>
+               <artifactId>jdeps-maven-plugin</artifactId>
+               <!--
+                   Not enabling automatic executions; run:
+                    > mvn jdeps:jdeps
+                    to get a report.
+               -->
+               <configuration>
+                  <!-- Allows to see which JRE profiles will be needed -->
+                  <profile>true</profile>
+                  <failOnWarning>true</failOnWarning>
+               </configuration>
+            </plugin>
+            <plugin>
+                <!-- This defines the properties 'parsedVersion.majorVersion'
+                    and 'parsedVersion.minorVersion' to be in synch with the current project version -->
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>1.9.1</version>
+                <executions>
+                    <execution>
+                    <id>parse-version</id>
+                    <goals>
+                        <goal>parse-version</goal>
+                    </goals>
+                  </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>org.sonatype.plugins</groupId>
@@ -598,6 +747,7 @@
                             <excludes>
                                 <exclude>**/hibernate.properties</exclude>
                                 <exclude>**/log4j.properties</exclude>
+                                <exclude>**/META-INF/**</exclude>
                             </excludes>
                         </configuration>
                     </execution>
@@ -606,10 +756,9 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
-                <version>1.1.1</version>
                 <executions>
                     <execution>
-                        <id>enforce-java</id>
+                        <id>enforce-rules</id>
                         <goals>
                             <goal>enforce</goal>
                         </goals>
@@ -618,12 +767,13 @@
                 <configuration>
                     <rules>
                         <requireJavaVersion>
-                            <!-- require JDK 1.6 to run the build -->
-                            <version>[1.6,)</version>
+                            <!-- require JDK 1.7 to run the build -->
+                            <version>[${minJdkVersion},)</version>
                         </requireJavaVersion>
                         <requireMavenVersion>
-                            <version>3.0.4</version>
+                            <version>3.2.3</version>
                         </requireMavenVersion>
+                        <DependencyConvergence />
                     </rules>
                 </configuration>
             </plugin>
@@ -631,32 +781,61 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-release-plugin</artifactId>
                 <configuration>
-                    <releaseProfiles>docs,dist</releaseProfiles>
                     <goals>deploy</goals>
+                    <arguments>-DskipTests</arguments>
+                    <pushChanges>false</pushChanges>
+                    <localCheckout>true</localCheckout>
+                    <preparationGoals>clean install</preparationGoals>
+                    <autoVersionSubmodules>true</autoVersionSubmodules>
+                    <allowTimestampedSnapshots>true</allowTimestampedSnapshots>
+                    <tagNameFormat>@{project.version}</tagNameFormat>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>de.thetaphi</groupId>
+                <artifactId>forbiddenapis</artifactId>
             </plugin>
         </plugins>
         <pluginManagement>
             <plugins>
                 <plugin>
+                    <!-- Creates a report by running "mvn clirr:clirr" -->
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>clirr-maven-plugin</artifactId>
+                    <version>2.6.1</version>
+                    <configuration>
+                        <comparisonVersion>5.4.0.Final</comparisonVersion>
+                        <excludes>
+                            <exclude>org/hibernate/search/**/impl/**</exclude>
+                        </excludes>
+                        <logResults>true</logResults>
+                        <minSeverity>info</minSeverity>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>com.github.marschall</groupId>
+                    <artifactId>jdeps-maven-plugin</artifactId>
+                    <version>0.4.0</version>
+                </plugin>
+                <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-clean-plugin</artifactId>
-                    <version>2.4.1</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-install-plugin</artifactId>
-                    <version>2.3.1</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-resources-plugin</artifactId>
                     <version>2.5</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-install-plugin</artifactId>
+                    <version>2.5.1</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>2.6</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-site-plugin</artifactId>
-                    <version>3.0</version>
+                    <version>3.3</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -666,12 +845,12 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
-                    <version>2.4</version>
+                    <version>3.1</version>
                 </plugin>
                 <plugin>
                     <groupId>org.bsc.maven</groupId>
                     <artifactId>maven-processor-plugin</artifactId>
-                    <version>2.0.2</version>
+                    <version>2.2.4</version>
                     <executions>
                         <!-- Run annotation processors on src/main/java sources -->
                         <execution>
@@ -684,7 +863,7 @@
                                 <processors>
                                     <processor>org.jboss.logging.processor.apt.LoggingToolsProcessor</processor>
                                 </processors>
-                                <compilerArguments>-AtranslationFilesPath=${project.basedir}/src/main/resources/ -source 1.6 -target 1.6</compilerArguments>
+                                <compilerArguments>-AtranslationFilesPath=${project.basedir}/src/main/resources/ -source 1.7 -target 1.7</compilerArguments>
                             </configuration>
                         </execution>
                     </executions>
@@ -705,24 +884,47 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
-                    <version>2.12</version>
+                    <version>2.17</version>
                     <configuration>
+                        <forkCount>1</forkCount>
+                        <reuseForks>true</reuseForks>
                         <redirectTestOutputToFile>true</redirectTestOutputToFile>
+                        <runOrder>alphabetical</runOrder>
+                        <systemPropertyVariables>
+                            <!-- See HSEARCH-1444 -->
+                            <hibernate.service.allow_crawling>false</hibernate.service.allow_crawling>
+                            <com.sun.management.jmxremote>true</com.sun.management.jmxremote>
+                            <org.hibernate.search.enable_performance_tests>${org.hibernate.search.enable_performance_tests}</org.hibernate.search.enable_performance_tests>
+                        </systemPropertyVariables>
+                        <additionalClasspathElements>
+                            <!-- Needed by Byteman to load the agent on demand -->
+                            <additionalClasspathElement>${jdk-toolsjar}</additionalClasspathElement>
+                        </additionalClasspathElements>
                     </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.jboss.maven.plugins</groupId>
                     <artifactId>maven-jdocbook-plugin</artifactId>
-                    <version>2.3.6</version>
+                    <version>2.3.9</version>
                     <extensions>true</extensions>
                     <dependencies>
                         <dependency>
+                            <groupId>org.jboss.pressgang</groupId>
+                            <artifactId>pressgang-xslt-ns</artifactId>
+                            <version>3.1.3</version>
+                        </dependency>
+                        <dependency>
                             <groupId>org.hibernate</groupId>
                             <artifactId>hibernate-jdocbook-style</artifactId>
-                            <version>2.0.1</version>
+                            <version>3.0.0</version>
                             <type>jdocbook-style</type>
                         </dependency>
                     </dependencies>
+                </plugin>
+                <plugin>
+                    <groupId>org.asciidoctor</groupId>
+                    <artifactId>asciidoctor-maven-plugin</artifactId>
+                    <version>1.5.2</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -732,13 +934,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-release-plugin</artifactId>
-                    <version>2.2.2</version>
-                    <configuration>
-                        <preparationGoals>clean install</preparationGoals>
-                        <autoVersionSubmodules>true</autoVersionSubmodules>
-                        <allowTimestampedSnapshots>true</allowTimestampedSnapshots>
-                        <tagNameFormat>@{project.version}</tagNameFormat>
-                    </configuration>
+                    <version>2.5</version>
                 </plugin>
                 <plugin>
                     <groupId>org.jboss.maven.plugins</groupId>
@@ -748,12 +944,30 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-javadoc-plugin</artifactId>
-                    <version>2.9</version>
+                    <version>2.9.1</version>
+                    <configuration>
+                        <!-- Fail on error alternative -->
+                        <!-- <additionalparam>-Xdoclint:none</additionalparam> -->
+                        <additionalDependencies>
+                            <additionalDependency>
+                                <groupId>org.jboss.logging</groupId>
+                                <artifactId>jboss-logging-annotations</artifactId>
+                                <version>${jbossLoggingProcessorVersion}</version>
+                            </additionalDependency>
+                        </additionalDependencies>
+                        <tags>
+                            <tag>
+                                <name>hsearch.experimental</name>
+                                <placement>a</placement>
+                                <head>Experimental</head>
+                            </tag>
+                        </tags>
+                    </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-source-plugin</artifactId>
-                    <version>2.1.2</version>
+                    <version>2.2.1</version>
                     <executions>
                         <execution>
                             <id>attach-sources</id>
@@ -767,35 +981,115 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-deploy-plugin</artifactId>
-                    <version>2.7</version>
+                    <version>2.8.1</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-failsafe-plugin</artifactId>
-                    <version>2.12.4</version>
+                    <version>2.17</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-dependency-plugin</artifactId>
-                    <version>2.4</version>
+                    <version>2.8</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-help-plugin</artifactId>
-                    <version>2.1.1</version>
+                    <version>2.2</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-enforcer-plugin</artifactId>
+                    <version>1.3.1</version>
+                </plugin>
+                <plugin>
+                    <groupId>de.thetaphi</groupId>
+                    <artifactId>forbiddenapis</artifactId>
+                    <version>1.8</version>
+                    <executions>
+                        <execution>
+                            <id>verify-forbidden-apis</id>
+                                <configuration>
+                                     <targetVersion>1.7</targetVersion>
+                                     <!-- disallow undocumented classes like sun.misc.Unsafe: -->
+                                     <internalRuntimeForbidden>true</internalRuntimeForbidden>
+                                     <!-- if the used Java version is too new, don't fail, just do nothing: -->
+                                     <failOnUnsupportedJava>false</failOnUnsupportedJava>
+                                     <excludes>
+                                         <!-- JBoss Logger formats messages according to default Locale (bug or feature?) -->
+                                         <exclude>**/Log_$logger.class</exclude>
+                                     </excludes>
+                                     <bundledSignatures>
+                                         <!-- This will automatically choose the right signatures based on 'targetVersion': -->
+                                         <bundledSignature>jdk-unsafe</bundledSignature>
+                                         <bundledSignature>jdk-deprecated</bundledSignature>
+                                         <bundledSignature>jdk-system-out</bundledSignature>
+                                     </bundledSignatures>
+                                 </configuration>
+                             <phase>compile</phase>
+                             <goals>
+                                 <goal>check</goal>
+                             </goals>
+                         </execution>
+                         <execution>
+                             <id>verify-forbidden-test-apis</id>
+                             <configuration>
+                                 <targetVersion>1.7</targetVersion>
+                                 <!-- disallow undocumented classes like sun.misc.Unsafe: -->
+                                 <internalRuntimeForbidden>true</internalRuntimeForbidden>
+                                 <!-- if the used Java version is too new, don't fail, just do nothing: -->
+                                 <failOnUnsupportedJava>false</failOnUnsupportedJava>
+                                 <bundledSignatures>
+                                     <!-- This will automatically choose the right signatures based on 'targetVersion': -->
+                                     <bundledSignature>jdk-unsafe</bundledSignature>
+                                     <bundledSignature>jdk-deprecated</bundledSignature>
+                                 </bundledSignatures>
+                             </configuration>
+                             <phase>test-compile</phase>
+                             <goals>
+                                 <goal>testCheck</goal>
+                             </goals>
+                        </execution>
+                    </executions>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-checkstyle-plugin</artifactId>
-                    <version>2.9.1</version>
+                    <version>2.12.1</version>
+                    <dependencies>
+                        <dependency>
+                            <groupId>org.hibernate</groupId>
+                            <artifactId>hibernate-search-build-config</artifactId>
+                            <version>${project.version}</version>
+                        </dependency>
+                        <!--
+                             force SLF4J dependency to align
+                             Maven internals and CheckStyle's
+                             see https://github.com/jcgay/maven-color/wiki/Problems
+                             If that causes problem, that can be removed
+                             but maven-color won't work -->
+                        <dependency>
+                            <groupId>org.slf4j</groupId>
+                            <artifactId>jcl-over-slf4j</artifactId>
+                            <version>1.7.5</version>
+                        </dependency>
+                        <dependency>
+                            <groupId>org.slf4j</groupId>
+                            <artifactId>slf4j-jdk14</artifactId>
+                            <version>1.7.5</version>
+                        </dependency>
+                    </dependencies>
                     <configuration>
-                        <configLocation>src/main/build-config/checkstyle.xml</configLocation>
+                        <!-- Location is relative to the classpath -->
+                        <configLocation>checkstyle.xml</configLocation>
                         <consoleOutput>true</consoleOutput>
                         <failsOnError>true</failsOnError>
                         <violationSeverity>error</violationSeverity>
                         <includeTestSourceDirectory>true</includeTestSourceDirectory>
-                        <!-- generated code -->
-                        <excludes>**/Generated.java,**/TypeHelper*.java</excludes>
+                        <resourceIncludes>**/*.xml,**/*.properties</resourceIncludes>
+                        <!-- generated respectively copied code -->
+                        <excludes>**/Generated.java,**/TypeHelper*.java,**/MatchSuppressor.java,**/CommentSuppressor.java,**/NeverSuppress.java</excludes>
                     </configuration>
                     <executions>
                         <execution>
@@ -806,6 +1100,12 @@
                             </goals>
                         </execution>
                     </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.felix</groupId>
+                    <artifactId>maven-bundle-plugin</artifactId>
+                    <extensions>true</extensions>
+                    <version>2.3.7</version>
                 </plugin>
                 <plugin>
                     <!-- This plugin's configuration is used in m2e only. -->
@@ -835,6 +1135,60 @@
                                         <versionRange>[2.1,)</versionRange>
                                         <goals>
                                             <goal>unpack</goal>
+                                            <goal>build-classpath</goal>
+                                        </goals>
+                                    </pluginExecutionFilter>
+                                    <action>
+                                        <ignore />
+                                    </action>
+                                </pluginExecution>
+                                <pluginExecution>
+                                    <pluginExecutionFilter>
+                                        <groupId>org.apache.felix</groupId>
+                                        <artifactId>maven-bundle-plugin</artifactId>
+                                        <versionRange>[2.3.7,)</versionRange>
+                                        <goals>
+                                            <goal>manifest</goal>
+                                        </goals>
+                                    </pluginExecutionFilter>
+                                    <action>
+                                        <ignore />
+                                    </action>
+                                </pluginExecution>
+                                <pluginExecution>
+                                    <pluginExecutionFilter>
+                                        <groupId>org.apache.servicemix.tooling</groupId>
+                                        <artifactId>depends-maven-plugin</artifactId>
+                                        <versionRange>[1.2,)</versionRange>
+                                        <goals>
+                                            <goal>generate-depends-file</goal>
+                                        </goals>
+                                    </pluginExecutionFilter>
+                                    <action>
+                                        <ignore />
+                                    </action>
+                                </pluginExecution>
+                                <pluginExecution>
+                                    <pluginExecutionFilter>
+                                        <groupId>org.codehaus.mojo</groupId>
+                                        <artifactId>build-helper-maven-plugin</artifactId>
+                                        <versionRange>[1.9.1,)</versionRange>
+                                        <goals>
+                                            <goal>parse-version</goal>
+                                        </goals>
+                                    </pluginExecutionFilter>
+                                    <action>
+                                        <ignore />
+                                    </action>
+                                </pluginExecution>
+                                <pluginExecution>
+                                    <pluginExecutionFilter>
+                                        <groupId>de.thetaphi</groupId>
+                                        <artifactId>forbiddenapis</artifactId>
+                                        <versionRange>[1.8,)</versionRange>
+                                        <goals>
+                                            <goal>check</goal>
+                                            <goal>testCheck</goal>
                                         </goals>
                                     </pluginExecutionFilter>
                                     <action>
@@ -844,6 +1198,18 @@
                             </pluginExecutions>
                         </lifecycleMappingMetadata>
                     </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>com.github.alexcojocaru</groupId>
+                    <artifactId>elasticsearch-maven-plugin</artifactId>
+                    <version>2.0</version>
+                    <dependencies>
+                        <dependency>
+                            <groupId>org.slf4j</groupId>
+                            <artifactId>slf4j-api</artifactId>
+                            <version>${slf4jVersion}</version>
+                        </dependency>
+                    </dependencies>
                 </plugin>
             </plugins>
         </pluginManagement>
@@ -872,24 +1238,44 @@
 
     <profiles>
         <profile>
-            <id>docs</id>
-            <modules>
-                <module>documentation</module>
-            </modules>
-        </profile>
-
-        <profile>
             <id>dist</id>
+
+            <properties>
+                <failOnJavaDocError>true</failOnJavaDocError>
+            </properties>
+
             <modules>
                 <module>distribution</module>
             </modules>
         </profile>
 
         <profile>
-            <id>perf</id>
+            <id>docs</id>
+            <activation>
+                <!-- asciidoctor won't work on JDK9  -->
+                <jdk>[1.7,1.8]</jdk>
+            </activation>
             <modules>
-                <module>integrationtest/performance</module>
+                <module>documentation</module>
             </modules>
+        </profile>
+
+        <profile>
+            <id>integration-karaf</id>
+            <activation>
+                <!-- Karaf won't work on JDK9  -->
+                <jdk>[1.7,1.8]</jdk>
+            </activation>
+            <modules>
+                <module>integrationtest/osgi/karaf-it</module>
+            </modules>
+        </profile>
+
+        <profile>
+            <id>perf</id>
+            <properties>
+                <org.hibernate.search.enable_performance_tests>true</org.hibernate.search.enable_performance_tests>
+            </properties>
         </profile>
 
         <!-- =============================== -->
@@ -924,7 +1310,7 @@
         <!--
             ###################################################################
             Profiles naming db instances in the Red Hat QA/QE lab
-            
+
             First, those with OSS drivers
             ###################################################################
         -->
@@ -967,6 +1353,47 @@
                 <jdbc.url>jdbc:postgresql://notinstalled.lab.eng.bos.redhat.com:5432:searctru</jdbc.url>
                 <jdbc.user>searctru</jdbc.user>
                 <jdbc.pass>searctru</jdbc.pass>
+                <jdbc.isolation />
+            </properties>
+        </profile>
+
+        <!-- The PostgreSQL test environment on ci.hibernate.org (v. 9.3.9)-->
+        <profile>
+            <id>ci-postgresql</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.postgresql</groupId>
+                    <artifactId>postgresql</artifactId>
+                    <version>9.3-1103-jdbc41</version>
+                </dependency>
+            </dependencies>
+            <properties>
+                <db.dialect>org.hibernate.dialect.PostgreSQL92Dialect</db.dialect>
+                <jdbc.driver>org.postgresql.Driver</jdbc.driver>
+                <jdbc.url>jdbc:postgresql://localhost:5432/testingdb</jdbc.url>
+                <jdbc.user>hibernate_user</jdbc.user>
+                <jdbc.pass>hibernate_password</jdbc.pass>
+                <jdbc.isolation />
+            </properties>
+        </profile>
+
+        <!-- The MySQL test environment test environment on ci.hibernate.org (v. 10.0.19-MariaDB)-->
+        <profile>
+            <id>ci-mariadb</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.mariadb.jdbc</groupId>
+                    <artifactId>mariadb-java-client</artifactId>
+                    <version>1.1.7</version>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+            <properties>
+                <db.dialect>org.hibernate.dialect.MySQL5InnoDBDialect</db.dialect>
+                <jdbc.driver>org.mariadb.jdbc.Driver</jdbc.driver>
+                <jdbc.url>jdbc:mariadb://localhost/testingdb</jdbc.url>
+                <jdbc.user>hibernate_user</jdbc.user>
+                <jdbc.pass>hibernate_password</jdbc.pass>
                 <jdbc.isolation />
             </properties>
         </profile>
@@ -1144,7 +1571,7 @@
             </properties>
         </profile>
 
-        <!-- The SQLServer2008 R2 (MS JDBC) test envionment -->
+        <!-- The SQLServer2008 R2 (MS JDBC) test environment -->
         <profile>
             <id>mssql2008R2</id>
             <dependencies>

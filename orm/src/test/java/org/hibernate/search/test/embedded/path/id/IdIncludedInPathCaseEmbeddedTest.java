@@ -1,37 +1,30 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2012 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.embedded.path.id;
 
 import java.util.List;
 
-import junit.framework.Assert;
-
 import org.apache.lucene.search.Query;
+
 import org.hibernate.Session;
 import org.hibernate.Transaction;
+
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.SearchException;
+import org.hibernate.search.exception.SearchException;
 import org.hibernate.search.query.dsl.QueryBuilder;
-import org.hibernate.search.test.SearchTestCase;
+import org.hibernate.search.test.SearchTestBase;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * {@link org.hibernate.search.annotations.IndexedEmbedded#includePaths()}
@@ -40,12 +33,13 @@ import org.hibernate.search.test.SearchTestCase;
  *
  * @author Davide D'Alto
  */
-public class IdIncludedInPathCaseEmbeddedTest extends SearchTestCase {
+public class IdIncludedInPathCaseEmbeddedTest extends SearchTestBase {
 
 	private Session s = null;
 	private EntityA entityA = null;
 
 	@Override
+	@Before
 	public void setUp() throws Exception {
 		super.setUp();
 		EntityC indexedC = new EntityC( "indexedId", "indexed" );
@@ -63,6 +57,7 @@ public class IdIncludedInPathCaseEmbeddedTest extends SearchTestCase {
 	}
 
 	@Override
+	@After
 	public void tearDown() throws Exception {
 		s.clear();
 
@@ -71,6 +66,7 @@ public class IdIncludedInPathCaseEmbeddedTest extends SearchTestCase {
 		super.tearDown();
 	}
 
+	@Test
 	public void testIdAttributeIndexedIfInPath() throws Exception {
 		List<EntityA> result = search( s, "b.indexed.id", "indexedId" );
 
@@ -78,6 +74,7 @@ public class IdIncludedInPathCaseEmbeddedTest extends SearchTestCase {
 		Assert.assertEquals( entityA.id, result.get( 0 ).id );
 	}
 
+	@Test
 	public void testDocumentIdIsIndexedIfInPath() throws Exception {
 		List<EntityA> result = search( s, "b.indexed.document.documentId", "indexedDocumentId" );
 
@@ -85,12 +82,14 @@ public class IdIncludedInPathCaseEmbeddedTest extends SearchTestCase {
 		Assert.assertEquals( entityA.id, result.get( 0 ).id );
 	}
 
+	@Test
 	public void testEmbeddedNotIndexedIfNotInPath() throws Exception {
 		try {
 			search( s, "b.skipped.skippedId", "skippedId" );
 			fail( "Should not index embedded property if not in path and not in depth limit" );
 		}
-		catch ( SearchException e ) {
+		catch (SearchException e) {
+			assertTrue( "Unexpected error message: " + e.getMessage(), e.getMessage().startsWith( "Unable to find field" ) );
 		}
 	}
 
@@ -123,7 +122,7 @@ public class IdIncludedInPathCaseEmbeddedTest extends SearchTestCase {
 	}
 
 	@Override
-	protected Class<?>[] getAnnotatedClasses() {
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class<?>[] { EntityA.class, EntityB.class, EntityC.class, DocumentEntity.class };
 	}
 }

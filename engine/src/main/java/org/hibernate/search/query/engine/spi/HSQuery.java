@@ -1,22 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.query.engine.spi;
 
@@ -27,11 +13,11 @@ import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Sort;
-
-import org.hibernate.search.FullTextFilter;
-import org.hibernate.search.ProjectionConstants;
-import org.hibernate.search.engine.spi.SearchFactoryImplementor;
+import org.hibernate.search.engine.ProjectionConstants;
+import org.hibernate.search.engine.integration.impl.ExtendedSearchIntegrator;
+import org.hibernate.search.filter.FullTextFilter;
 import org.hibernate.search.spatial.Coordinates;
+import org.hibernate.search.spi.SearchIntegrator;
 
 /**
  * Defines and executes an Hibernate Search query (wrapping a Lucene query).
@@ -40,9 +26,9 @@ import org.hibernate.search.spatial.Coordinates;
  *
  * This object is not meant to be thread safe.
  * The typical usage is as follow
- * <code>
- * //get query object
- * HSQuery query = searchFactoryIngegrator.createHSQuery();
+ * <pre>
+ * {@code  //get query object
+ * HSQuery query = searchIntegrator.createHSQuery();
  * //configure query object
  * query
  * .luceneQuery( luceneQuery )
@@ -60,9 +46,10 @@ import org.hibernate.search.spatial.Coordinates;
  *
  * //done with the core of the query
  * query.getTimeoutManager().stop();
- * </code>
+ * }
+ * </pre>
  *
- * @author Emmanuel Bernard <emmanuel@hibernate.org>
+ * @author Emmanuel Bernard
  */
 public interface HSQuery extends ProjectionConstants {
 	/**
@@ -72,6 +59,8 @@ public interface HSQuery extends ProjectionConstants {
 	 * @return {@code this} to allow method chaining
 	 */
 	HSQuery luceneQuery(Query query);
+
+	HSQuery tenantIdentifier(String tenantId);
 
 	/**
 	 * Defines the targeted entities. This helps to reduce the number of targeted indexes.
@@ -114,10 +103,10 @@ public interface HSQuery extends ProjectionConstants {
 	 * Defines the Lucene field names projected and returned in a query result
 	 * Each field is converted back to it's object representation, an Object[] being returned for each "row"
 	 * (similar to an HQL or a Criteria API projection).
-	 * <p/>
+	 * <p>
 	 * A projectable field must be stored in the Lucene index and use a {@link org.hibernate.search.bridge.TwoWayFieldBridge}
 	 * Unless notified in their JavaDoc, all built-in bridges are two-way. All @DocumentId fields are projectable by design.
-	 * <p/>
+	 * <p>
 	 * If the projected field is not a projectable field, null is returned in the object[]
 	 *
 	 * @param fields the projected field names
@@ -150,7 +139,7 @@ public interface HSQuery extends ProjectionConstants {
 	List<Class<?>> getTargetedEntities();
 
 	/**
-	 * WTF does that do exactly
+	 * @return a set of indexed entities corresponding to the class hierarchy of the targeted entities
 	 */
 	Set<Class<?>> getIndexedTargetedEntities();
 
@@ -176,7 +165,7 @@ public interface HSQuery extends ProjectionConstants {
 
 	/**
 	 * Execute the Lucene query and return the list of {@code EntityInfo}s populated with
-	 * metadata and projection. {@link org.hibernate.search.ProjectionConstants#THIS} if projected is <br>not</br> populated.
+	 * metadata and projection. {@link org.hibernate.search.engine.ProjectionConstants#THIS} if projected is <b>not</b> populated.
 	 * It is the responsibility of the object source integration.
 	 *
 	 * @return list of {@code EntityInfo}s populated with metadata and projection
@@ -186,9 +175,9 @@ public interface HSQuery extends ProjectionConstants {
 	/**
 	 * Execute the Lucene query and return a traversable object over the results.
 	 * Results are lazily fetched.
-	 * {@link org.hibernate.search.ProjectionConstants#THIS} if projected is <br>not</br> populated. It is the responsibility
+	 * {@link org.hibernate.search.engine.ProjectionConstants#THIS} if projected is <b>not</b> populated. It is the responsibility
 	 * of the object source integration.
-	 * The returned {@code DocumentExtractor} <br>must</br> be closed by the caller to release Lucene resources.
+	 * The returned {@code DocumentExtractor} <b>must</b> be closed by the caller to release Lucene resources.
 	 *
 	 * @return the {@code DocumentExtractor} instance
 	 */
@@ -196,7 +185,7 @@ public interface HSQuery extends ProjectionConstants {
 
 	/**
 	 * @return the number of hits for this search
-	 *         <p/>
+	 *         <p>
 	 *         Caution:
 	 *         The number of results might be slightly different from
 	 *         what the object source returns if the index is
@@ -230,19 +219,20 @@ public interface HSQuery extends ProjectionConstants {
 	void disableFullTextFilter(String name);
 
 	/**
-	 * <p>getSearchFactoryImplementor.</p>
+	 * <p>getExtendedSearchIntegrator.</p>
 	 *
-	 * @return the {@code SearchFactoryImplementor} instance
-	 * @deprecated should be at most SearchFactoryIntegrator, preferably removed altogether
+	 * @return the {@code ExtendedSearchintegrator} instance
+	 * @deprecated should be at most SearchIntegrator, preferably removed altogether
 	 */
-	SearchFactoryImplementor getSearchFactoryImplementor();
+	@Deprecated
+	ExtendedSearchIntegrator getExtendedSearchIntegrator();
 
 	/**
 	 * <p>afterDeserialise.</p>
 	 *
-	 * @param searchFactory a {@link org.hibernate.search.engine.spi.SearchFactoryImplementor} object.
+	 * @param integrator a {@link org.hibernate.search.spi.SearchIntegrator} object.
 	 */
-	void afterDeserialise(SearchFactoryImplementor searchFactory);
+	void afterDeserialise(SearchIntegrator integrator);
 
 	/**
 	 * <p>setSpatialParameters.</p>

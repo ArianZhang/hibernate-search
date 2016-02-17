@@ -1,52 +1,42 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2011, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.embedded.depth;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.List;
-
-import junit.framework.Assert;
+import java.util.Map;
 
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.Query;
-import org.apache.lucene.util.ReaderUtil;
 import org.hibernate.Session;
 import org.hibernate.Transaction;
-import org.hibernate.cfg.Configuration;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.SearchException;
+import org.hibernate.search.exception.SearchException;
 import org.hibernate.search.backend.LuceneWork;
 import org.hibernate.search.indexes.IndexReaderAccessor;
 import org.hibernate.search.query.dsl.QueryBuilder;
-import org.hibernate.search.test.SearchTestCase;
-import org.hibernate.search.test.util.LeakingLuceneBackend;
+import org.hibernate.search.test.SearchTestBase;
+import org.hibernate.search.testsupport.backend.LeakingBackendQueueProcessor;
 import org.hibernate.testing.SkipForDialect;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * <pre>
- * FAMILY: {@link IndexEmbedded#depth} = 2
+ * FAMILY: {@link org.hibernate.search.annotations.IndexedEmbedded#depth()} = 2
  *
  * 13 Philippa of Toulouse __________
  * 12 William IX of Aquitaine _______|- 6 William X of Aquitaine __
@@ -63,7 +53,7 @@ import org.hibernate.testing.SkipForDialect;
  * </pre>
  *
  * <pre>
- * WORK: {@link IndexEmbedded#depth} = 1
+ * WORK: {@link org.hibernate.search.annotations.IndexedEmbedded#depth()#depth} = 1
  *
  * 20 Technical Manager____________
  * 21 Leasing Manager _____________|-18 Real estate director _
@@ -75,12 +65,11 @@ import org.hibernate.testing.SkipForDialect;
  * @author Sanne Grinovero
  */
 @SkipForDialect(comment = "looks like a database deadlock", value = org.hibernate.dialect.SybaseASE15Dialect.class, jiraKey = "HSEARCH-1107")
-public class WorkDoneOnEntitiesTest extends SearchTestCase {
+public class WorkDoneOnEntitiesTest extends SearchTestBase {
 
-	private Session session = null;
-
+	@Test
 	public void testEmployeesIndexingInDepth() throws Exception {
-		List<WorkingPerson> result = search( session, "employees.name", "Technical Manager" );
+		List<WorkingPerson> result = search( "employees.name", "Technical Manager" );
 
 		assertEquals( "Unexpected number of results", 1, result.size() );
 		assertEquals(
@@ -90,8 +79,9 @@ public class WorkDoneOnEntitiesTest extends SearchTestCase {
 		checkRawIndexFields();
 	}
 
+	@Test
 	public void testParentsIndexingInDepth() throws Exception {
-		List<WorkingPerson> result = search( session, "parents.parents.name", "Empress Matilda" );
+		List<WorkingPerson> result = search( "parents.parents.name", "Empress Matilda" );
 
 		assertEquals( "Unexpected number of results", 1, result.size() );
 		assertEquals(
@@ -99,87 +89,99 @@ public class WorkDoneOnEntitiesTest extends SearchTestCase {
 			"John of England", result.get( 0 ).name
 		);
 
-		result = search( session, "parents.parents.parents.name", "Ermengarde of Maine" );
+		result = search( "parents.parents.parents.name", "Ermengarde of Maine" );
 		assertEquals( "Unexpected number of results", 1, result.size() );
 		checkRawIndexFields();
 	}
 
+	@Test
 	public void testNoWorkShouldBeExecutedOnPerson() throws Exception {
-		renamePerson( session, 17, "Montford" );
+		renamePerson( 17, "Montford" );
 		checkRawIndexFields();
 		assertEquals( 0, countWorksDoneOnPersonId( 1 ) );
 	}
 
+	@Test
 	public void testWorkShouldBeExecutedOnPerson() throws Exception {
-		renamePerson( session, 6, "William" );
+		renamePerson( 6, "William" );
 		checkRawIndexFields();
 		assertEquals( 1, countWorksDoneOnPersonId( 1 ) );
 	}
 
+	@Test
 	public void testNoWorkShouldBeExecutedOnEmployee() throws Exception {
-		renamePerson( session, 23, "LM" );
+		renamePerson( 23, "LM" );
 		checkRawIndexFields();
 		assertEquals( 0, countWorksDoneOnPersonId( 1 ) );
 	}
 
+	@Test
 	public void testWorkShouldBeExecutedOnEmployee() throws Exception {
-		renamePerson( session, 19, "FM" );
+		renamePerson( 19, "FM" );
 		checkRawIndexFields();
 		assertEquals( 1, countWorksDoneOnPersonId( 1 ) );
 	}
 
+	@Test
 	public void testShouldNotIndexParentsBeyondDepth() throws Exception {
 		try {
 			// fails only if DSL fails:
-			search( session, "parents.parents.parents.parents.name", "Bertrade de Montfort" );
+			search( "parents.parents.parents.parents.name", "Bertrade de Montfort" );
 			fail( "Should not index a field if it is beyond the depth threshold" );
 		}
-		catch ( SearchException e ) {
+		catch (SearchException e) {
 		}
 		checkRawIndexFields();
 	}
 
+	@Test
 	public void testShouldNotIndexBeyondMixedPathDepth() throws Exception {
 		try {
 			// fails only if DSL fails:
-			search( session, "parents.employees.employees.name", "Techincal Manager" );
+			search( "parents.employees.employees.name", "Techincal Manager" );
 			fail( "Should not index a field if it is beyond the depth threshold, considering minimum depth along paths" );
 		}
-		catch ( SearchException e ) {
+		catch (SearchException e) {
 		}
 		checkRawIndexFields();
 	}
 
+	@Test
 	public void testShouldNotIndexEmployeesBeyondDepth() throws Exception {
 		try {
-			search( session, "employees.employees.name", "Techincal Manager" );
+			search( "employees.employees.name", "Techincal Manager" );
 			fail( "Should not index a field if it is beyond the depth threshold" );
 		}
-		catch ( SearchException e ) {
+		catch (SearchException e) {
 		}
 		checkRawIndexFields();
 	}
 
-	private void checkRawIndexFields() {
+	private void checkRawIndexFields() throws IOException {
 		// check raw index as well:
-		Assert.assertTrue( indexContainsField( "name" ) );
-		Assert.assertTrue( indexContainsField( "employees.name" ) );
-		Assert.assertTrue( indexContainsField( "parents.name" ) );
-		Assert.assertTrue( indexContainsField( "parents.parents.name" ) );
-		Assert.assertTrue( indexContainsField( "parents.parents.parents.name" ) );
-		Assert.assertTrue( indexContainsField( "parents.employees.name" ) );
-		Assert.assertTrue( indexContainsField( "parents.parents.employees.name" ) );
-		Assert.assertFalse( indexContainsField( "employees.employees.name" ) );
-		Assert.assertFalse( indexContainsField( "employees.parents.name" ) );
-		Assert.assertFalse( indexContainsField( "parents.employees.employees.name" ) );
-		Assert.assertFalse( indexContainsField( "parents.parents.parents.employees.name" ) );
+		assertTrue( indexContainsField( "name" ) );
+		assertTrue( indexContainsField( "employees.name" ) );
+		assertTrue( indexContainsField( "parents.name" ) );
+		assertTrue( indexContainsField( "parents.parents.name" ) );
+		assertTrue( indexContainsField( "parents.parents.parents.name" ) );
+		assertTrue( indexContainsField( "parents.employees.name" ) );
+		assertTrue( indexContainsField( "parents.parents.employees.name" ) );
+		assertFalse( indexContainsField( "employees.employees.name" ) );
+		assertFalse( indexContainsField( "employees.parents.name" ) );
+		assertFalse( indexContainsField( "parents.employees.employees.name" ) );
+		assertFalse( indexContainsField( "parents.parents.parents.employees.name" ) );
 	}
 
-	private boolean indexContainsField(String fieldName) {
+	private boolean indexContainsField(String fieldName) throws IOException {
 		IndexReaderAccessor indexReaderAccessor = getSearchFactory().getIndexReaderAccessor();
 		IndexReader indexReader = indexReaderAccessor.open( WorkingPerson.class );
 		try {
-			return ReaderUtil.getIndexedFields( indexReader ).contains( fieldName );
+			for ( LeafReaderContext leave : indexReader.leaves() ) {
+				if ( leave.reader().terms( fieldName ) != null ) {
+					return true;
+				}
+			}
+			return false;
 		}
 		finally {
 			indexReaderAccessor.close( indexReader );
@@ -187,16 +189,17 @@ public class WorkDoneOnEntitiesTest extends SearchTestCase {
 	}
 
 	@Override
+	@Before
 	public void setUp() throws Exception {
 		super.setUp();
-		session = openSession();
+		Session session = openSession();
 		Transaction transaction = session.beginTransaction();
 		WorkingPerson[] ps = new WorkingPerson[27];
 		// array index starting from 1 to match ids of picture at http://en.wikipedia.org/wiki/John,_King_of_England
 		ps[1] = new WorkingPerson( 1, "John of England" );
 		ps[2] = new WorkingPerson( 2, "Henry II of England" );
 		ps[3] = new WorkingPerson( 3, "Eleanor of Aquitaine" );
-		ps[4] = new WorkingPerson( 4, "Geoffrey V  of Anjou" );
+		ps[4] = new WorkingPerson( 4, "Geoffrey V of Anjou" );
 		ps[5] = new WorkingPerson( 5, "Empress Matilda" );
 		ps[6] = new WorkingPerson( 6, "William X of Aquitaine" );
 		ps[7] = new WorkingPerson( 7, "Aenor de Châtellerault" );
@@ -244,21 +247,18 @@ public class WorkDoneOnEntitiesTest extends SearchTestCase {
 			session.save( ps[i] );
 		}
 		transaction.commit();
-		LeakingLuceneBackend.reset();
+		LeakingBackendQueueProcessor.reset();
 	}
 
 	@Override
+	@After
 	public void tearDown() throws Exception {
-		session.clear();
-
-		deleteAll( session, WorkingPerson.class );
-		session.close();
-		LeakingLuceneBackend.reset();
+		LeakingBackendQueueProcessor.reset();
 		super.tearDown();
 	}
 
-	private List<WorkingPerson> search(Session s, String field, String value) {
-		FullTextSession session = Search.getFullTextSession( s );
+	private List<WorkingPerson> search(String field, String value) {
+		FullTextSession session = Search.getFullTextSession( getSession() );
 		@SuppressWarnings("unchecked")
 		List<WorkingPerson> result = session
 			.createFullTextQuery( searchQuery( field, value, session ) )
@@ -272,26 +272,15 @@ public class WorkDoneOnEntitiesTest extends SearchTestCase {
 		return queryBuilder.keyword().onField( field ).matching( value ).createQuery();
 	}
 
-	private void deleteAll(Session s, Class<?>... classes) {
-		Transaction tx = s.beginTransaction();
-		for ( Class<?> each : classes ) {
-			List<?> list = s.createCriteria( each ).list();
-			for ( Object object : list ) {
-				s.delete( object );
-			}
-		}
-		tx.commit();
-	}
-
-	private void renamePerson(Session s, Integer id, String newName) {
-		Transaction transaction = s.beginTransaction();
-		WorkingPerson person = (WorkingPerson) s.load( WorkingPerson.class, id );
+	private void renamePerson(Integer id, String newName) {
+		Transaction transaction = getSession().beginTransaction();
+		WorkingPerson person = (WorkingPerson) getSession().load( WorkingPerson.class, id );
 		person.name = newName;
 		transaction.commit();
 	}
 
 	private int countWorksDoneOnPersonId(Integer pk) {
-		List<LuceneWork> processedQueue = LeakingLuceneBackend.getLastProcessedQueue();
+		List<LuceneWork> processedQueue = LeakingBackendQueueProcessor.getLastProcessedQueue();
 		int count = 0;
 		for ( LuceneWork luceneWork : processedQueue ) {
 			Serializable id = luceneWork.getId();
@@ -303,13 +292,13 @@ public class WorkDoneOnEntitiesTest extends SearchTestCase {
 	}
 
 	@Override
-	protected Class<?>[] getAnnotatedClasses() {
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class<?>[] { WorkingPerson.class };
 	}
 
-	protected void configure(Configuration cfg) {
-		super.configure( cfg );
-		cfg.setProperty( "hibernate.search.default.worker.backend", LeakingLuceneBackend.class.getName() );
+	@Override
+	public void configure(Map<String,Object> cfg) {
+		cfg.put( "hibernate.search.default.worker.backend", LeakingBackendQueueProcessor.class.getName() );
 	}
 
 }

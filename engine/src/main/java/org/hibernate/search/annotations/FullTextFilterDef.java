@@ -1,33 +1,16 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.annotations;
 
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Documented;
 
 /**
  * Defines a FullTextFilter that can be optionally applied to
@@ -37,24 +20,28 @@ import java.lang.annotation.Documented;
  * @author Emmanuel Bernard
  */
 @Retention( RetentionPolicy.RUNTIME )
-@Target( { ElementType.TYPE } )
+@Target( { ElementType.PACKAGE, ElementType.TYPE } )
 @Documented
 public @interface FullTextFilterDef {
+
 	/**
 	 * @return the filter name. Must be unique across all mappings for a given persistence unit
 	 */
 	String name();
 
 	/**
-	 * Either implements {@link org.apache.lucene.search.Filter}
-	 * or contains a <code>@Factory</code> method returning one.
-	 * The generated <code>Filter</code> must be thread-safe.
+	 * The implementation of this filter definition. May be
+	 * <ul>
+	 * <li>a class implementing {@link org.apache.lucene.search.Filter} or</li>
+	 * <li>a filter factory class, defining a method annotated with {@link Factory} which has no parameters and returns
+	 * a {@code Filter} instance.</li>
+	 * </ul>
+	 * The given class must define a no-args constructor and a JavaBeans setter method for each parameter to be passed
+	 * via {@link org.hibernate.search.filter.FullTextFilter#setParameter(String, Object)}.
+	 * <p>
+	 * The Lucene filter created by this filter definition must be thread-safe.
 	 *
-	 * If the filter accept parameters, an <code>@Key</code> method must be present as well.
-	 *
-	 * @return a class which either implements <code>Filter</code> directly or contains a method annotated with
-	 * <code>@Factory</code>.
-	 *
+	 * @return A class implementing {@code Filter} or a filter factory class
 	 */
 	Class<?> impl();
 

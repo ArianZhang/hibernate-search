@@ -1,36 +1,21 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.store.impl;
 
-import java.io.IOException;
 import java.util.Properties;
 
+import org.apache.lucene.store.LockFactory;
 import org.apache.lucene.store.RAMDirectory;
-import org.hibernate.search.SearchException;
-import org.hibernate.search.indexes.impl.DirectoryBasedIndexManager;
+import org.hibernate.search.engine.service.spi.ServiceManager;
+import org.hibernate.search.indexes.spi.DirectoryBasedIndexManager;
 import org.hibernate.search.spi.BuildContext;
 import org.hibernate.search.store.DirectoryProvider;
+import org.hibernate.search.store.spi.DirectoryHelper;
+import org.hibernate.search.store.spi.LockFactoryCreator;
 
 /**
  * Use a Lucene RAMDirectory
@@ -40,44 +25,51 @@ import org.hibernate.search.store.DirectoryProvider;
  */
 public class RAMDirectoryProvider implements DirectoryProvider<RAMDirectory> {
 
-	private final RAMDirectory directory = makeRAMDirectory();
+	private RAMDirectory directory;
 
 	private String indexName;
 	private Properties properties;
+	private ServiceManager serviceManager;
 
 	@Override
 	public void initialize(String directoryProviderName, Properties properties, BuildContext context) {
-		indexName = directoryProviderName;
+		this.indexName = directoryProviderName;
 		this.properties = properties;
+		this.serviceManager = context.getServiceManager();
 	}
 
 	@Override
 	public void start(DirectoryBasedIndexManager indexManager) {
 		try {
-			directory.setLockFactory( DirectoryProviderHelper.createLockFactory( null, properties ) );
+			LockFactory lockFactory = serviceManager
+					.requestService( LockFactoryCreator.class )
+					.createLockFactory( null, properties );
+			directory = makeRAMDirectory( lockFactory );
 			properties = null;
-			DirectoryProviderHelper.initializeIndexIfNeeded( directory );
+			DirectoryHelper.initializeIndexIfNeeded( directory );
 		}
-		catch (IOException e) {
-			throw new SearchException( "Unable to initialize index: " + indexName, e );
+		finally {
+			serviceManager.releaseService( LockFactoryCreator.class );
 		}
 	}
 
-
+	@Override
 	public RAMDirectory getDirectory() {
 		return directory;
 	}
 
+	@Override
 	public void stop() {
 		directory.close();
 	}
 
 	/**
 	 * To allow extensions to create different RAMDirectory flavours:
+	 * @param lockFactory provides the locking strategy
 	 * @return the RAMDirectory this provider is going to manage
 	 */
-	protected RAMDirectory makeRAMDirectory() {
-		return new RAMDirectory();
+	protected RAMDirectory makeRAMDirectory(LockFactory lockFactory) {
+		return new RAMDirectory( lockFactory );
 	}
 
 	@Override

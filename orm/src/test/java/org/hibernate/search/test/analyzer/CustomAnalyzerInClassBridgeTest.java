@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2012, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.analyzer;
 
@@ -30,10 +13,8 @@ import javax.persistence.Table;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
-import org.apache.lucene.document.Fieldable;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.TermQuery;
-
 import org.hibernate.Transaction;
 import org.hibernate.search.FullTextQuery;
 import org.hibernate.search.FullTextSession;
@@ -48,9 +29,15 @@ import org.hibernate.search.annotations.Indexed;
 import org.hibernate.search.annotations.TokenizerDef;
 import org.hibernate.search.bridge.FieldBridge;
 import org.hibernate.search.bridge.LuceneOptions;
-import org.hibernate.search.test.SearchTestCase;
+import org.hibernate.search.bridge.MetadataProvidingFieldBridge;
+import org.hibernate.search.bridge.spi.FieldMetadataBuilder;
+import org.hibernate.search.bridge.spi.FieldType;
+import org.hibernate.search.test.SearchTestBase;
 import org.hibernate.search.util.logging.impl.Log;
 import org.hibernate.search.util.logging.impl.LoggerFactory;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
 
 /**
  * Add test to the various ways to customize the analyzer used for
@@ -61,14 +48,16 @@ import org.hibernate.search.util.logging.impl.LoggerFactory;
  *
  * @author Hardy Ferentschik
  */
-public class CustomAnalyzerInClassBridgeTest extends SearchTestCase {
+public class CustomAnalyzerInClassBridgeTest extends SearchTestBase {
 
 	public static final Log log = LoggerFactory.make();
 
-	protected Class<?>[] getAnnotatedClasses() {
+	@Override
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] { Foo.class, Bar.class };
 	}
 
+	@Test
 	public void testCustomAnalyzersAppliedForFieldsAddedInClassBridge() throws Exception {
 		FullTextSession fullTextSession = Search.getFullTextSession( openSession() );
 		Transaction tx = fullTextSession.beginTransaction();
@@ -91,6 +80,7 @@ public class CustomAnalyzerInClassBridgeTest extends SearchTestCase {
 		fullTextSession.close();
 	}
 
+	@Test
 	public void testClassBridgeWithSingleField() throws Exception {
 		FullTextSession fullTextSession = Search.getFullTextSession( openSession() );
 		Transaction tx = fullTextSession.beginTransaction();
@@ -126,7 +116,7 @@ public class CustomAnalyzerInClassBridgeTest extends SearchTestCase {
 		private Integer id;
 	}
 
-	public static class FooBridge implements Discriminator, FieldBridge {
+	public static class FooBridge implements Discriminator, MetadataProvidingFieldBridge {
 
 		public static final String[] fieldNames = new String[] { "field1", "field2", "field3" };
 		public static final String[] analyzerNames = new String[] { "analyzer1", "analyzer2", "analyzer3" };
@@ -134,7 +124,7 @@ public class CustomAnalyzerInClassBridgeTest extends SearchTestCase {
 		@Override
 		public void set(String name, Object value, Document document, LuceneOptions luceneOptions) {
 			for ( String fieldName : fieldNames ) {
-				Fieldable field = new Field(
+				Field field = new Field(
 						fieldName,
 						"This text will be replaced by the test analyzers",
 						luceneOptions.getStore(),
@@ -146,6 +136,7 @@ public class CustomAnalyzerInClassBridgeTest extends SearchTestCase {
 			}
 		}
 
+		@Override
 		public String getAnalyzerDefinitionName(Object value, Object entity, String field) {
 			for ( int i = 0; i < fieldNames.length; i++ ) {
 				if ( fieldNames[i].equals( field ) ) {
@@ -153,6 +144,13 @@ public class CustomAnalyzerInClassBridgeTest extends SearchTestCase {
 				}
 			}
 			return null;
+		}
+
+		@Override
+		public void configureFieldMetadata(String name, FieldMetadataBuilder builder) {
+			for ( String field : fieldNames ) {
+				builder.field( field, FieldType.STRING );
+			}
 		}
 	}
 
@@ -170,7 +168,7 @@ public class CustomAnalyzerInClassBridgeTest extends SearchTestCase {
 
 		@Override
 		public void set(String name, Object value, Document document, LuceneOptions luceneOptions) {
-			Fieldable field = new Field(
+			Field field = new Field(
 					name,
 					"This text will be replaced by the test analyzers",
 					luceneOptions.getStore(),

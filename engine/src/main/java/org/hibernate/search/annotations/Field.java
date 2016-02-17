@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 /**
@@ -46,12 +29,14 @@ import java.lang.annotation.Target;
 public @interface Field {
 
 	/**
-	 * Default value for {@link #indexNullAs} parameter. Indicates that {@code null} values should not be indexed.
+	 * Default value for the {@link #indexNullAs} parameter. Indicates that {@code null} values should not be indexed.
 	 */
 	String DO_NOT_INDEX_NULL = "__DO_NOT_INDEX_NULL__";
 
 	/**
-	 * Value for {@link #indexNullAs} parameter indicating that {@code null} values should not indexed using the
+	 * Value for the {@link #indexNullAs} parameter indicating that {@code null} values should be indexed using the null
+	 * token given through the {@link org.hibernate.search.cfg.Environment#DEFAULT_NULL_TOKEN} configuration property.
+	 * If no value is given for that property, the token {@code _null_} will be used.
 	 */
 	String DEFAULT_NULL_TOKEN = "__DEFAULT_NULL_TOKEN__";
 

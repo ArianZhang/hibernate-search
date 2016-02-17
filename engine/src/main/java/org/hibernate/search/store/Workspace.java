@@ -1,22 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.store;
 
@@ -25,14 +11,18 @@ import java.util.Set;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.index.IndexWriter;
 import org.hibernate.search.backend.LuceneWork;
+import org.hibernate.search.backend.impl.CommitPolicy;
 import org.hibernate.search.engine.spi.DocumentBuilderIndexedEntity;
 
 /**
- * @author Sanne Grinovero <sanne@hibernate.org> (C) 2011 Red Hat Inc.
+ * @deprecated This interface will be moved and should be considered non-public API [HSEARCH-1915]
+ *
+ * @author Sanne Grinovero (C) 2011 Red Hat Inc.
  */
+@Deprecated
 public interface Workspace {
 
-	<T> DocumentBuilderIndexedEntity<?> getDocumentBuilder(Class<T> entity);
+	DocumentBuilderIndexedEntity getDocumentBuilder(Class<?> entity);
 
 	Analyzer getAnalyzer(String name);
 
@@ -46,9 +36,9 @@ public interface Workspace {
 	 * Used by OptimizeLuceneWork to start an optimization process of the index.
 	 *
 	 * @param writer the IndexWriter to use for optimization
-	 * @see OptimizeLuceneWork
-	 * @see SearchFactory#optimize()
-	 * @see SearchFactory#optimize(Class)
+	 * @see org.hibernate.search.backend.OptimizeLuceneWork
+	 * @see org.hibernate.search.spi.SearchIntegrator#optimize()
+	 * @see org.hibernate.search.spi.SearchIntegrator#optimize(Class)
 	 */
 	void performOptimization(IndexWriter writer);
 
@@ -60,7 +50,7 @@ public interface Workspace {
 	IndexWriter getIndexWriter();
 
 	/**
-	 * @return The unmodifiable set of entity types being indexed
+	 * @return The set of entity types being indexed
 	 * in the underlying IndexManager backing this Workspace.
 	 */
 	Set<Class<?>> getEntitiesInIndexManager();
@@ -82,14 +72,26 @@ public interface Workspace {
 	void flush();
 
 	/**
-	 * Return true if it's safe to perform index delete operations using only the identifier term.
-	 * This can be more efficient but can not work if there are multiple indexed types in the same
-	 * index possibly sharing the same id term, or if the index might contain entity types we don't
-	 * know.
+	 * Returns true if one and only one entity type is stored in the targeted index.
+	 * This allows to use delete by the identifier term which is much faster.
 	 *
-	 * @return true if it's safe to do the single term operation.
+	 * This method should really be named {@code isSingleClassInIndex} but that's a public contract.
+	 * @return true if one and only one entity type is stored in the targeted index.
 	 */
 	boolean areSingleTermDeletesSafe();
+
+	/**
+	 * Returns true if either the configuration guarantees that one can use delete by term on all indexes
+	 * or if we ensure that entity types stored in the index return positive to {@link org.hibernate.search.cfg.spi.IdUniquenessResolver}
+	 * and that the document id and JPA id are the same property.
+	 *
+	 * This allows to use delete by identifier term in a safe way and is much more efficient.
+	 * If unsure, we will delete taking the class field into account to avoid unwanted document deletions.
+	 *
+	 * The method should really be named {@code isDeleteByTermEnforcedOrSafe} but that's a public contract.
+	 * @return true if either the configuration guarantees that one can use delete by term on all indexes
+	 */
+	boolean isDeleteByTermEnforced();
 
 	/**
 	 * Some workspaces need this to determine for example the kind of flush operations which are safe
@@ -97,5 +99,17 @@ public interface Workspace {
 	 * @param work the LuceneWork which was just processed
 	 */
 	void notifyWorkApplied(LuceneWork work);
+
+	/**
+	 * Get the commit policy applied to the workspace
+	 * @return {@link org.hibernate.search.backend.impl.CommitPolicy}
+	 */
+	CommitPolicy getCommitPolicy();
+
+	/**
+	 * Returns the name of the index this workspace is being used for.
+	 * @return the name of the index
+	 */
+	String getIndexName();
 
 }

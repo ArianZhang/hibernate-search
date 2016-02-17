@@ -1,31 +1,15 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.engine;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
+
 import javax.persistence.CascadeType;
 import javax.persistence.Entity;
 import javax.persistence.Id;
@@ -46,7 +30,7 @@ import static org.hibernate.search.annotations.FieldCacheType.CLASS;
 import static org.hibernate.search.annotations.FieldCacheType.ID;
 
 /**
- * @author Sanne Grinovero <sanne@hibernate.org> (C) 2011 Red Hat Inc.
+ * @author Sanne Grinovero (C) 2011 Red Hat Inc.
  * @author Gustavo Fernandes
  */
 @Entity
@@ -55,8 +39,9 @@ import static org.hibernate.search.annotations.FieldCacheType.ID;
 public class Location {
 
 	@Id
-	@DocumentId(name = "overriddenFieldName")
-	@NumericField
+	@DocumentId
+	@Field(name = "overriddenFieldName")
+	@NumericField(forField = "overriddenFieldName")
 	private int id;
 
 	public int getId() {
@@ -67,19 +52,15 @@ public class Location {
 	private Country country;
 
 	@Field(name = "myCounter")
-	@NumericField(forField = "myCounter")
 	private Long counter;
 
 	@Field(store = Store.YES)
-	@NumericField(forField = "latitude", precisionStep = 1)
 	private double latitude;
 
 	@Field(store = Store.YES)
-	@NumericField(forField = "longitude")
 	private Double longitude;
 
 	@Field
-	@NumericField
 	private Integer ranking;
 
 	@Field
@@ -90,14 +71,14 @@ public class Location {
 	@Field(store = Store.YES)
 	@NumericField
 	@FieldBridge(impl = CoordinatesPairFieldBridge.class)
-	private String coordinatePair = "1;2";
+	private final String coordinatePair = "1;2";
 
 	@Field
 	private String description;
 
 	@OneToMany(mappedBy = "location", cascade = { CascadeType.ALL })
 	@IndexedEmbedded
-	private Collection<PinPoint> pinPoints = new ArrayList<PinPoint>();
+	private final Collection<PinPoint> pinPoints = new ArrayList<PinPoint>();
 
 	@Fields({
 			@Field(name = "strMultiple"),
@@ -108,11 +89,28 @@ public class Location {
 	})
 	private Double multiple;
 
+	@Field(store = Store.YES)
+	@NumericField
+	private short importance;
+
+	@Field(store = Store.YES)
+	@NumericField
+	private Short fallbackImportance;
+
+	@Field(store = Store.YES)
+	@NumericField
+	private byte popularity;
+
+	@Field(store = Store.YES)
+	@NumericField
+	private Byte fallbackPopularity;
+
+
 	public Location() {
 	}
 
 	public Location(int id, Long counter, double latitude, Double longitude,
-					Integer ranking, String description, Double multiple, Country country, BigDecimal visibleStars) {
+					Integer ranking, String description, Double multiple, Country country, BigDecimal visibleStars, short importance, byte popularity) {
 		this.id = id;
 		this.counter = counter;
 		this.longitude = longitude;
@@ -122,6 +120,10 @@ public class Location {
 		this.multiple = multiple;
 		this.country = country;
 		this.visibleStars = visibleStars;
+		this.importance = importance;
+		this.fallbackImportance = importance;
+		this.popularity = popularity;
+		this.fallbackPopularity = popularity;
 	}
 
 	public void addPinPoints(PinPoint... pinPoints) {
@@ -136,3 +138,4 @@ public class Location {
 	}
 
 }
+

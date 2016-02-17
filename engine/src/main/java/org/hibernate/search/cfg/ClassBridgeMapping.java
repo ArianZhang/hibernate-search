@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.cfg;
 
@@ -27,12 +10,13 @@ import java.lang.annotation.ElementType;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.apache.solr.analysis.TokenizerFactory;
+import org.apache.lucene.analysis.util.TokenizerFactory;
 import org.hibernate.search.annotations.Analyze;
 import org.hibernate.search.annotations.Index;
 import org.hibernate.search.annotations.Norms;
 import org.hibernate.search.annotations.Store;
 import org.hibernate.search.annotations.TermVector;
+import org.hibernate.search.bridge.FieldBridge;
 
 public class ClassBridgeMapping {
 
@@ -41,14 +25,28 @@ public class ClassBridgeMapping {
 	private final Map<String, Object> classBridge;
 
 	public ClassBridgeMapping(SearchMapping mapping, EntityDescriptor entity, Class<?> impl) {
-		this.mapping = mapping;
-		this.entity = entity;
-		this.classBridge = new HashMap<String, Object>();
+		this( mapping, entity );
+
 		entity.addClassBridgeDef( classBridge );
+
 		if ( impl != null ) {
 			this.classBridge.put( "impl", impl );
 		}
+	}
 
+	public ClassBridgeMapping(SearchMapping mapping, EntityDescriptor entity, FieldBridge instance) {
+		this( mapping, entity );
+
+		entity.addClassBridgeInstanceDef( instance, classBridge );
+
+		// the given bridge instance is actually used, a class object is still required to instantiate the annotation
+		this.classBridge.put( "impl", void.class );
+	}
+
+	private ClassBridgeMapping(SearchMapping mapping, EntityDescriptor entity) {
+		this.mapping = mapping;
+		this.entity = entity;
+		this.classBridge = new HashMap<String, Object>();
 	}
 
 	public ClassBridgeMapping name(String name) {
@@ -111,6 +109,20 @@ public class ClassBridgeMapping {
 
 	public ClassBridgeMapping classBridge(Class<?> impl) {
 		return new ClassBridgeMapping( mapping, entity, impl );
+	}
+
+	/**
+	 * Registers the given class bridge for the currently configured entity type. Any subsequent analyzer, parameter
+	 * etc. configurations apply to this class bridge.
+	 *
+	 * @param instance a class bridge instance
+	 * @return a new {@link ClassBridgeMapping} following the method chaining pattern
+	 * @hsearch.experimental This method is considered experimental and it may be altered or removed in future releases
+	 * @throws org.hibernate.search.exception.SearchException in case the same bridge instance is passed more than once for the
+	 * currently configured entity type
+	 */
+	public ClassBridgeMapping classBridgeInstance(FieldBridge instance) {
+		return new ClassBridgeMapping( mapping, entity, instance );
 	}
 
 	public FullTextFilterDefMapping fullTextFilterDef(String name, Class<?> impl) {

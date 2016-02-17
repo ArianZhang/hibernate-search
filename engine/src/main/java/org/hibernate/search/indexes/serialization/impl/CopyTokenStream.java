@@ -1,22 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.indexes.serialization.impl;
 
@@ -40,7 +26,7 @@ import org.hibernate.search.util.logging.impl.LoggerFactory;
  * Original file released under the ASL 2.0 license
  * http://www.apache.org/licenses/LICENSE-2.0
  *
- * @author Emmanuel Bernard <emmanuel@hibernate.org>
+ * @author Emmanuel Bernard
  */
 public class CopyTokenStream extends TokenStream implements Serializable {
 	private static final Log log = LoggerFactory.make();
@@ -48,12 +34,12 @@ public class CopyTokenStream extends TokenStream implements Serializable {
 	private List<List<AttributeImpl>> cache;
 	private int index;
 
-	public static SerializableTokenStream buildSerializabletokenStream(TokenStream tokenStream) {
+	public static SerializableTokenStream buildSerializableTokenStream(TokenStream tokenStream) {
 		try {
-			List<List<AttributeImpl>> stream = fillCache( tokenStream );
+			List<List<AttributeImpl>> stream = createAttributeLists( tokenStream );
 			return new SerializableTokenStream(stream);
 		}
-		catch ( IOException e ) {
+		catch (IOException e) {
 			throw log.unableToReadTokenStream();
 		}
 	}
@@ -94,15 +80,15 @@ public class CopyTokenStream extends TokenStream implements Serializable {
 		index = 0;
 	}
 
-	private static List<List<AttributeImpl>> fillCache(TokenStream input) throws IOException {
-		List<List<AttributeImpl>> results = new ArrayList<List<AttributeImpl>>();
+	private static List<List<AttributeImpl>> createAttributeLists(TokenStream input) throws IOException {
+		List<List<AttributeImpl>> results = new ArrayList<>();
 		while ( input.incrementToken() ) {
-			List<AttributeImpl> attrs = new ArrayList<AttributeImpl>(  );
+			List<AttributeImpl> attrs = new ArrayList<>();
 			results.add( attrs );
 			Iterator<AttributeImpl> iter = input.getAttributeImplsIterator();
 			while ( iter.hasNext() ) {
 				//we need to clone as AttributeImpl instances can be reused across incrementToken() calls
-				attrs.add( (AttributeImpl) iter.next().clone() );
+				attrs.add( iter.next().clone() );
 			}
 		}
 		input.end();

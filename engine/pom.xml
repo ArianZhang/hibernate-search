@@ -1,26 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Hibernate, Relational Persistence for Idiomatic Java
-  ~
-  ~  Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
-  ~  indicated by the @author tags or express copyright attribution
-  ~  statements applied by the authors.  All third-party contributions are
-  ~  distributed under license by Red Hat, Inc.
-  ~
-  ~  This copyrighted material is made available to anyone wishing to use, modify,
-  ~  copy, or redistribute it subject to the terms and conditions of the GNU
-  ~  Lesser General Public License, as published by the Free Software Foundation.
-  ~
-  ~  This program is distributed in the hope that it will be useful,
-  ~  but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-  ~  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
-  ~  for more details.
-  ~
-  ~  You should have received a copy of the GNU Lesser General Public License
-  ~  along with this distribution; if not, write to:
-  ~  Free Software Foundation, Inc.
-  ~  51 Franklin Street, Fifth Floor
-  ~  Boston, MA  02110-1301  USA
+ ~ Hibernate Search, full-text search for your domain model
+ ~
+ ~ License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ ~ See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
   -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
@@ -28,20 +11,16 @@
     <parent>
         <artifactId>hibernate-search-parent</artifactId>
         <groupId>org.hibernate</groupId>
-        <version>4.4.0-SNAPSHOT</version>
+        <version>5.6.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>hibernate-search-engine</artifactId>
 
     <name>Hibernate Search Engine</name>
-    <description>the core of the Object/Lucene mapper, query engine and index management</description>
+    <description>Core of the Object/Lucene mapper, query engine and index management</description>
 
     <dependencies>
-        <dependency>
-            <groupId>org.hibernate</groupId>
-            <artifactId>hibernate-search-analyzers</artifactId>
-        </dependency>
         <dependency>
             <groupId>org.hibernate.common</groupId>
             <artifactId>hibernate-commons-annotations</artifactId>
@@ -51,21 +30,38 @@
             <artifactId>lucene-core</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.jboss.logging</groupId>
-            <artifactId>jboss-logging</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.avro</groupId>
-            <artifactId>avro</artifactId>
+            <groupId>org.apache.lucene</groupId>
+            <artifactId>lucene-backward-codecs</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.lucene</groupId>
-            <artifactId>lucene-analyzers</artifactId>
-            <optional>true</optional>
+            <artifactId>lucene-misc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.lucene</groupId>
+            <artifactId>lucene-analyzers-common</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.lucene</groupId>
             <artifactId>lucene-facet</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.lucene</groupId>
+            <artifactId>lucene-queryparser</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.jboss.spec.javax.transaction</groupId>
+            <artifactId>jboss-transaction-api_1.2_spec</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.jboss.logging</groupId>
+            <artifactId>jboss-logging</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.jboss.logging</groupId>
+            <artifactId>jboss-logging-annotations</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.tika</groupId>
@@ -73,48 +69,13 @@
             <optional>true</optional>
         </dependency>
         <dependency>
-            <groupId>org.jgroups</groupId>
-            <artifactId>jgroups</artifactId>
-            <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>javax.transaction</groupId>
-            <artifactId>jta</artifactId>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>javax.jms</groupId>
-            <artifactId>jms</artifactId>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>javax.annotation</groupId>
-            <artifactId>jsr250-api</artifactId>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.activemq</groupId>
-            <artifactId>activemq-core</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>simple-jndi</groupId>
-            <artifactId>simple-jndi</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -141,7 +102,11 @@
             <groupId>log4j</groupId>
             <artifactId>log4j</artifactId>
             <scope>test</scope>
-            <version>1.2.16</version>
+        </dependency>
+        <dependency>
+            <groupId>org.unitils</groupId>
+            <artifactId>unitils-easymock</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
@@ -166,24 +131,9 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <configuration>
-                    <forkMode>once</forkMode>
-                    <redirectTestOutputToFile>true</redirectTestOutputToFile>
-                    <argLine>-Djava.net.preferIPv4Stack=true -Djgroups.bind_addr=127.0.0.1</argLine>
-                    <systemProperties>
-                        <property>
-                            <name>com.sun.management.jmxremote</name>
-                            <value>true</value>
-                        </property>
-                    </systemProperties>
-                    <additionalClasspathElements>
-                        <!-- Needed by Byteman to load the agent on demand -->
-                        <additionalClasspathElement>${jdk-toolsjar}</additionalClasspathElement>
-                    </additionalClasspathElements>
-                </configuration>
             </plugin>
-            <plugin> 
-                <groupId>org.apache.maven.plugins</groupId> 
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-checkstyle-plugin</artifactId>
             </plugin>
             <plugin>
@@ -211,13 +161,120 @@
                             <expression>${project.version}</expression>
                             <targetMembers>
                                 <methodBodyReturn>
-                                    <className>org.hibernate.search.Version</className>
+                                    <className>org.hibernate.search.engine.Version</className>
                                     <methodName>getVersionString</methodName>
                                 </methodBodyReturn>
                             </targetMembers>
                         </bytecodeInjection>
                     </bytecodeInjections>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>default-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <archive>
+                                <manifestFile>${project.build.outputDirectory}/META-INF/MANIFEST.MF</manifestFile>
+                            </archive>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.felix</groupId>
+                <artifactId>maven-bundle-plugin</artifactId>
+                <configuration>
+                    <instructions>
+                        <Import-Package>
+                            org.hibernate.annotations.common.*;version="${hibernateHcannOsgiRangeVersion}",
+                            org.apache.lucene;version="${luceneOsgiRangeVersion}",
+                            org.apache.lucene.analysis;version="${luceneOsgiRangeVersion}",
+                            org.apache.lucene.analysis.core;version="${luceneOsgiRangeVersion}",
+                            org.apache.lucene.analysis.standard;version="${luceneOsgiRangeVersion}",
+                            org.apache.lucene.analysis.tokenattributes;version="${luceneOsgiRangeVersion}",
+                            org.apache.lucene.analysis.util;version="${luceneOsgiRangeVersion}",
+                            org.apache.lucene.document;version="${luceneOsgiRangeVersion}",
+                            org.apache.lucene.facet;version="${luceneOsgiRangeVersion}",
+                            org.apache.lucene.facet.range;version="${luceneOsgiRangeVersion}",
+                            org.apache.lucene.facet.sortedset;version="${luceneOsgiRangeVersion}",
+                            org.apache.lucene.index;version="${luceneOsgiRangeVersion}",
+                            org.apache.lucene.queries.mlt;version="${luceneOsgiRangeVersion}",
+                            org.apache.lucene.search;version="${luceneOsgiRangeVersion}",
+                            org.apache.lucene.search.similarities;version="${luceneOsgiRangeVersion}",
+                            org.apache.lucene.store;version="${luceneOsgiRangeVersion}",
+                            org.apache.lucene.uninverting;version="${luceneOsgiRangeVersion}",
+                            org.apache.lucene.util;version="${luceneOsgiRangeVersion}",
+                            org.apache.lucene.util.automaton;version="${luceneOsgiRangeVersion}",
+                            org.jboss.logging.*;version="${jbossLoggingOsgiRangeVersion}",
+                            org.apache.tika.*;version="[${tikaVersion}, 1.5)";resolution:=optional,
+                            javax.transaction.*;version="0";resolution:=optional
+                        </Import-Package>
+                        <Export-Package>
+                            org.hibernate.search.analyzer;version="${project.version}",
+                            org.hibernate.search.annotations;version="${project.version}",
+                            org.hibernate.search.backend;version="${project.version}",
+                            org.hibernate.search.backend.spi;version="${project.version}",
+                            org.hibernate.search.backend.impl.batch;version="${project.version}",
+                            org.hibernate.search.batchindexing;version="${project.version}",
+                            org.hibernate.search.bridge;version="${project.version}",
+                            org.hibernate.search.bridge.builtin;version="${project.version}",
+                            org.hibernate.search.bridge.spi;version="${project.version}",
+                            org.hibernate.search.bridge.util.impl;version="${project.version}",
+                            org.hibernate.search.cfg;version="${project.version}",
+                            org.hibernate.search.cfg.spi;version="${project.version}",
+                            org.hibernate.search.engine;version="${project.version}",
+                            org.hibernate.search.engine.spi;version="${project.version}",
+                            org.hibernate.search.engine.integration.impl;version="${project.version}",
+                            org.hibernate.search.engine.service.classloading.spi;version="${project.version}",
+                            org.hibernate.search.engine.service.classloading.impl;version="${project.version}",
+                            org.hibernate.search.engine.service.spi;version="${project.version}",
+                            org.hibernate.search.errors;version="${project.version}",
+                            org.hibernate.search.exception;version="${project.version}",
+                            org.hibernate.search.filter;version="${project.version}",
+                            org.hibernate.search.indexes;version="${project.version}",
+                            org.hibernate.search.indexes.interceptor;version="${project.version}",
+                            org.hibernate.search.indexes.serialization.spi;version="${project.version}",
+                            org.hibernate.search.indexes.spi;version="${project.version}",
+                            org.hibernate.search.jmx;version="${project.version}",
+                            org.hibernate.search.metadata;version="${project.version}",
+                            org.hibernate.search.query;version="${project.version}",
+                            org.hibernate.search.query.collector;version="${project.version}",
+                            org.hibernate.search.query.dsl;version="${project.version}",
+                            org.hibernate.search.query.engine;version="${project.version}",
+                            org.hibernate.search.query.engine.spi;version="${project.version}",
+                            org.hibernate.search.query.engine.impl;version="${project.version}",
+                            org.hibernate.search.query.facet;version="${project.version}",
+                            org.hibernate.search.query.fieldcache;version="${project.version}",
+                            org.hibernate.search.spatial;version="${project.version}",
+                            org.hibernate.search.spatial.impl;version="${project.version}",
+                            org.hibernate.search.spi;version="${project.version}",
+                            org.hibernate.search.stat;version="${project.version}",
+                            org.hibernate.search.stat.spi;version="${project.version}",
+                            org.hibernate.search.store;version="${project.version}",
+                            org.hibernate.search.store.spi;version="${project.version}",
+                            org.hibernate.search.store.optimization;version="${project.version}",
+                            org.hibernate.search.util;version="${project.version}",
+                            org.hibernate.search.util.impl;version="${project.version}",
+                            org.hibernate.search.util.logging.impl;version="${project.version}"
+                        </Export-Package>
+                    </instructions>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>bundle-manifest</id>
+                        <phase>process-classes</phase>
+                        <goals>
+                            <goal>manifest</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

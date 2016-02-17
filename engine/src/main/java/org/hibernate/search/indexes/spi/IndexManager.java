@@ -1,22 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.indexes.spi;
 
@@ -25,11 +11,11 @@ import java.util.Properties;
 import java.util.Set;
 
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.search.Similarity;
+import org.apache.lucene.search.similarities.Similarity;
 
 import org.hibernate.search.backend.IndexingMonitor;
 import org.hibernate.search.backend.LuceneWork;
-import org.hibernate.search.engine.spi.SearchFactoryImplementor;
+import org.hibernate.search.engine.integration.impl.ExtendedSearchIntegrator;
 import org.hibernate.search.indexes.serialization.spi.LuceneWorkSerializer;
 import org.hibernate.search.spi.WorkerBuildContext;
 
@@ -42,7 +28,7 @@ import org.hibernate.search.spi.WorkerBuildContext;
  * manager (and hence index) differently. A concrete implementation can also decide to only support a specific mode
  * of operation. It can ignore some configuration properties or expect additional properties.
  *
- * @author Sanne Grinovero <sanne@hibernate.org> (C) 2011 Red Hat Inc.
+ * @author Sanne Grinovero (C) 2011 Red Hat Inc.
  */
 public interface IndexManager {
 
@@ -83,17 +69,18 @@ public interface IndexManager {
 	void performStreamOperation(LuceneWork singleOperation, IndexingMonitor monitor, boolean forceAsync);
 
 	/**
-	 * Initialize the IndexManager before its use.
+	 * Initialize this {@code IndexManager} before its use.
 	 *
-	 * @param indexName The unique name of the index (manager). Can be used to retrieve a {@code IndexManager} instance
+	 * @param indexName the unique name of the index (manager). Can be used to retrieve a {@code IndexManager} instance
 	 * via the search factory and {@link org.hibernate.search.indexes.impl.IndexManagerHolder}.
-	 * @param properties The configuration properties
+	 * @param properties the configuration properties
+	 * @param similarity defines the component of Lucene scoring
 	 * @param context context information needed to initialize this index manager
 	 */
-	void initialize(String indexName, Properties properties, WorkerBuildContext context);
+	void initialize(String indexName, Properties properties, Similarity similarity, WorkerBuildContext context);
 
 	/**
-	 * Called when a <code>SearchFactory</code> is stopped. This method typically releases resources.
+	 * Called when a {@code SearchFactory} is stopped. This method typically releases resources.
 	 */
 	void destroy();
 
@@ -109,26 +96,19 @@ public interface IndexManager {
 	Similarity getSimilarity();
 
 	/**
-	 * Not intended to be a mutable option, but the Similarity might be defined later in the boot lifecycle.
-	 *
-	 * @param newSimilarity the new similarity value
-	 */
-	void setSimilarity(Similarity newSimilarity);
-
-	/**
 	 * @param name the name of the analyzer to retrieve.
 	 *
 	 * @return Returns the {@code Analyzer} with the given name (see also {@link org.hibernate.search.annotations.AnalyzerDef})
-	 * @throws org.hibernate.search.SearchException in case the analyzer name is unknown.
+	 * @throws org.hibernate.search.exception.SearchException in case the analyzer name is unknown.
 	 */
 	Analyzer getAnalyzer(String name);
 
 	/**
-	 * Connects this IndexManager to a new SearchFactory.
+	 * Connects this {@code IndexManager} to a new {@code ExtendedSearchintegrator}.
 	 *
-	 * @param boundSearchFactory the existing search factory to which to associate this index manager with
+	 * @param boundSearchIntegrator the existing search factory to which to associate this index manager with
 	 */
-	void setSearchFactory(SearchFactoryImplementor boundSearchFactory);
+	void setSearchFactory(ExtendedSearchIntegrator boundSearchIntegrator);
 
 	/**
 	 * @param entity Adds the specified entity type to this index manager, making it responsible for manging this type.
@@ -144,5 +124,10 @@ public interface IndexManager {
 	 * @return the Serializer implementation used for this IndexManager
 	 */
 	LuceneWorkSerializer getSerializer();
+
+	/**
+	 * Close the underlying index writer, releasing the index lock.
+	 */
+	void closeIndexWriter();
 
 }

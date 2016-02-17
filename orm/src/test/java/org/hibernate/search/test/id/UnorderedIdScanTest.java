@@ -1,31 +1,13 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2012, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.id;
 
 import java.lang.annotation.Annotation;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 
 import org.hibernate.annotations.common.reflection.Filter;
@@ -34,17 +16,22 @@ import org.hibernate.annotations.common.reflection.XClass;
 import org.hibernate.annotations.common.reflection.XMethod;
 import org.hibernate.annotations.common.reflection.XProperty;
 import org.hibernate.annotations.common.reflection.java.JavaReflectionManager;
+import org.hibernate.search.cfg.spi.SearchConfiguration;
+import org.hibernate.search.engine.impl.ConfigContext;
+import org.hibernate.search.engine.metadata.impl.AnnotationMetadataProvider;
+import org.hibernate.search.engine.metadata.impl.MetadataProvider;
+import org.hibernate.search.engine.metadata.impl.TypeMetadata;
 import org.hibernate.search.engine.spi.DocumentBuilderIndexedEntity;
-import org.hibernate.search.impl.ConfigContext;
-import org.hibernate.search.impl.SimpleInitializer;
+import org.hibernate.search.spi.DefaultInstanceInitializer;
 import org.hibernate.search.test.embedded.depth.PersonWithBrokenSocialSecurityNumber;
-import org.hibernate.search.test.util.ManualConfiguration;
-import org.hibernate.search.test.util.TestForIssue;
+import org.hibernate.search.testsupport.setup.BuildContextForTest;
+import org.hibernate.search.testsupport.setup.SearchConfigurationForTest;
+import org.hibernate.search.testsupport.TestForIssue;
 import org.junit.Test;
 
 /**
  * The order in which the XClass methods will be listed varies depending on the platform and JVM,
- * in particular we had an issue with annotations <code>@Id</code> and <code>@DocumentId</code>
+ * in particular we had an issue with annotations {@code @Id} and {@code @DocumentId}
  * when encountering them in unexpected order. This test verifies iteration order doesn't affect
  * our capability to startup correctly.
  *
@@ -71,10 +58,16 @@ public class UnorderedIdScanTest {
 	}
 
 	private static void tryCreatingDocumentBuilder(XClass mappedXClass, ReflectionManager reflectionManager) {
-		ManualConfiguration cfg = new ManualConfiguration();
-		ConfigContext context = new ConfigContext( cfg );
-		DocumentBuilderIndexedEntity docBuilder = new DocumentBuilderIndexedEntity( mappedXClass, context, null, reflectionManager,
-				new HashSet(), SimpleInitializer.INSTANCE );
+		SearchConfiguration searchConfiguration = new SearchConfigurationForTest();
+		ConfigContext context = new ConfigContext( searchConfiguration, new BuildContextForTest( searchConfiguration ) );
+		MetadataProvider metadataProvider = new AnnotationMetadataProvider( reflectionManager, context );
+		TypeMetadata typeMetadata = metadataProvider.getTypeMetadataFor( reflectionManager.toClass( mappedXClass ));
+		new DocumentBuilderIndexedEntity( mappedXClass,
+				typeMetadata,
+				context,
+				reflectionManager,
+				Collections.<XClass>emptySet(),
+				DefaultInstanceInitializer.DEFAULT_INITIALIZER );
 	}
 
 	/**
@@ -91,7 +84,12 @@ public class UnorderedIdScanTest {
 
 		@Override
 		public Class toClass(XClass xClazz) {
-			return class1;
+			try {
+				return super.toClass( xClazz );
+			}
+			catch (IllegalArgumentException e) {
+				return class1;
+			}
 		}
 
 		@Override

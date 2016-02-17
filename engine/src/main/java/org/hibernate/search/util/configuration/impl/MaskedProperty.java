@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.util.configuration.impl;
 
@@ -33,7 +16,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
-import java.util.InvalidPropertiesFormatException;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -43,13 +25,15 @@ import org.hibernate.search.util.logging.impl.Log;
 import org.hibernate.search.util.logging.impl.LoggerFactory;
 
 /**
- * A wrapper to Properties, to restrict the availability of
- * values to only those which have a key beginning with some
- * masking String.
+ * A wrapper to {@link Properties}, to restrict the availability of values to only those which have a key
+ * beginning with a given masking string.
+ *
  * Supported methods to enumerate the list of properties are:
- *   - propertyNames()
- *   - keySet()
- *   - keys()
+ * <ul>
+ * <li>propertyNames()</li>
+ * <li>keySet()</li>
+ * <li>keys()</li>
+ * </ul>
  * Other methods including methods returning Entries and values are not supported
  *
  * @author Sanne Grinovero
@@ -77,13 +61,12 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * Provides a view to the provided Properties hiding
-	 * all keys not starting with some [mask.].
-	 * If no value is found then a value is returned from propsFallBack,
-	 * without masking.
-	 * @param propsToMask
-	 * @param mask
-	 * @param propsFallBack
+	 * Provides a view to the provided Properties hiding all keys not starting with some [mask.].
+	 * If no value is found then a value is returned from propsFallBack, without masking.
+	 *
+	 * @param propsToMask the properties to mask
+	 * @param mask the mask applied to the properties
+	 * @param propsFallBack a fall-back map of properties in case a value is not found in the main one
 	 */
 	public MaskedProperty(Properties propsToMask, String mask, Properties propsFallBack) {
 		if ( propsToMask == null || mask == null ) {
@@ -98,7 +81,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	public String getProperty(String key) {
 		String compositeKey = radix + key;
 		String value = masked.getProperty( compositeKey );
-		if ( value != null) {
+		if ( value != null ) {
 			log.tracef( "found a match for key: [%s] value: %s", compositeKey, value );
 			return value;
 		}
@@ -111,11 +94,15 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
+	 * Check if a given properties is set.
+	 *
+	 * @param key the property key
+	 * @return {@code true} if the the property is set, {@code false} otherwise
 	 * @throws IllegalArgumentException if the key is not a String instance
 	 */
 	@Override
 	public synchronized boolean containsKey(Object key) {
-		if ( ! ( key instanceof String ) ) {
+		if ( !( key instanceof String ) ) {
 			throw new IllegalArgumentException( "key must be a String" );
 		}
 		return getProperty( key.toString() ) != null;
@@ -128,7 +115,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public void list(PrintStream out) {
@@ -136,7 +123,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public void list(PrintWriter out) {
@@ -144,7 +131,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public void load(InputStream inStream) throws IOException {
@@ -152,22 +139,21 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
-	public void loadFromXML(InputStream in) throws IOException,
-			InvalidPropertiesFormatException {
+	public void loadFromXML(InputStream in) throws IOException {
 		throw new UnsupportedOperationException();
 	}
 
 	@Override
-	public Enumeration<?> propertyNames() {
+	public synchronized Enumeration<?> propertyNames() {
 		initPropertyNames();
 		return Collections.enumeration( propertyNames );
 	}
 
 	private synchronized void initPropertyNames() {
-		if ( propertyNames != null) {
+		if ( propertyNames != null ) {
 			return;
 		}
 		Set<Object> maskedProperties = new TreeSet<Object>();
@@ -195,7 +181,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public void save(OutputStream out, String comments) {
@@ -203,7 +189,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public Object setProperty(String key, String value) {
@@ -211,7 +197,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public void store(OutputStream out, String comments)
@@ -220,7 +206,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public void storeToXML(OutputStream os, String comment,
@@ -229,7 +215,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public void storeToXML(OutputStream os, String comment)
@@ -238,7 +224,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public void clear() {
@@ -246,7 +232,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public Object clone() {
@@ -260,7 +246,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public boolean containsValue(Object value) {
@@ -268,7 +254,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public Enumeration<Object> elements() {
@@ -277,7 +263,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public Set<java.util.Map.Entry<Object, Object>> entrySet() {
@@ -285,7 +271,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public Object get(Object key) {
@@ -299,7 +285,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public synchronized Enumeration<Object> keys() {
@@ -308,13 +294,13 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	@Override
-	public Set<Object> keySet() {
+	public synchronized Set<Object> keySet() {
 		initPropertyNames();
 		return propertyNames;
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public Object put(Object key, Object value) {
@@ -322,7 +308,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public void putAll(Map<? extends Object, ? extends Object> t) {
@@ -330,7 +316,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	protected void rehash() {
@@ -338,16 +324,13 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public Object remove(Object key) {
 		throw new UnsupportedOperationException();
 	}
 
-	/**
-	 * @throws UnsupportedOperationException
-	 */
 	@Override
 	public synchronized int size() {
 		initPropertyNames();
@@ -366,7 +349,7 @@ public class MaskedProperty extends Properties implements Serializable {
 	}
 
 	/**
-	 * @throws UnsupportedOperationException
+	 * @throws UnsupportedOperationException always
 	 */
 	@Override
 	public Collection<Object> values() {
@@ -399,13 +382,13 @@ public class MaskedProperty extends Properties implements Serializable {
 				return false;
 			}
 		}
-		else if ( ! fallBack.equals( other.fallBack ) ) {
+		else if ( !fallBack.equals( other.fallBack ) ) {
 			return false;
 		}
-		if ( ! masked.equals( other.masked ) ) {
+		if ( !masked.equals( other.masked ) ) {
 			return false;
 		}
-		if ( ! radix.equals( other.radix ) ) {
+		if ( !radix.equals( other.radix ) ) {
 			return false;
 		}
 		return true;

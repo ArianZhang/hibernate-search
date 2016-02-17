@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.engine.spi;
 
@@ -31,7 +14,7 @@ import org.hibernate.annotations.common.reflection.ReflectionManager;
 import org.hibernate.annotations.common.reflection.XClass;
 import org.hibernate.search.backend.LuceneWork;
 import org.hibernate.search.bridge.spi.ConversionContext;
-import org.hibernate.search.impl.ConfigContext;
+import org.hibernate.search.engine.metadata.impl.TypeMetadata;
 import org.hibernate.search.spi.InstanceInitializer;
 
 /**
@@ -44,22 +27,22 @@ import org.hibernate.search.spi.InstanceInitializer;
  * @author Richard Hallier
  * @author Hardy Ferentschik
  */
-public class DocumentBuilderContainedEntity<T> extends AbstractDocumentBuilder<T> {
+public class DocumentBuilderContainedEntity extends AbstractDocumentBuilder {
 	/**
 	 * Constructor used on contained entities not annotated with {@code @Indexed} themselves.
 	 *
-	 * @param xClass The class for which to build a {@code DocumentBuilderContainedEntity}.
-	 * @param context Handle to default configuration settings.
-	 * @param reflectionManager Reflection manager to use for processing the annotations.
+	 * @param xClass The class for which to build a {@code DocumentBuilderContainedEntity}
+	 * @param typeMetadata metadata for the given type
+	 * @param reflectionManager Reflection manager to use for processing the annotations
 	 * @param optimizationBlackList mutable register, keeps track of types on which we need to disable collection events optimizations
-	 * @param instanceInitializer a {@link org.hibernate.search.spi.InstanceInitializer} object.
+	 * @param instanceInitializer a {@link org.hibernate.search.spi.InstanceInitializer} object
 	 */
 	public DocumentBuilderContainedEntity(XClass xClass,
-			ConfigContext context,
+			TypeMetadata typeMetadata,
 			ReflectionManager reflectionManager,
 			Set<XClass> optimizationBlackList,
 			InstanceInitializer instanceInitializer) {
-		super( xClass, context, null, reflectionManager, optimizationBlackList, instanceInitializer );
+		super( xClass, typeMetadata, reflectionManager, optimizationBlackList, instanceInitializer );
 
 		//done after init:
 		if ( getTypeMetadata().getContainedInMetadata().isEmpty() ) {
@@ -68,8 +51,10 @@ public class DocumentBuilderContainedEntity<T> extends AbstractDocumentBuilder<T
 	}
 
 	@Override
-	public void addWorkToQueue(Class<T> entityClass,
-			T entity,
+	public void addWorkToQueue(
+			String tenantId,
+			Class<?> entityClass,
+			Object entity,
 			Serializable id,
 			boolean delete,
 			boolean add,

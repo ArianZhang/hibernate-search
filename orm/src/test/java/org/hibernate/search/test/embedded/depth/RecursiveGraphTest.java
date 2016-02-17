@@ -1,43 +1,34 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.test.embedded.depth;
 
 import java.io.Serializable;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.hibernate.Session;
 import org.hibernate.Transaction;
-import org.hibernate.cfg.Configuration;
-import org.hibernate.search.backend.LuceneWork;
 import org.hibernate.search.FullTextQuery;
 import org.hibernate.search.FullTextSession;
 import org.hibernate.search.Search;
-import org.hibernate.search.test.SearchTestCase;
-import org.hibernate.search.test.util.LeakingLuceneBackend;
+import org.hibernate.search.backend.LuceneWork;
+import org.hibernate.search.exception.SearchException;
+import org.hibernate.search.spi.SearchIntegratorBuilder;
+import org.hibernate.search.test.SearchTestBase;
+import org.hibernate.search.test.util.HibernateManualConfiguration;
+import org.hibernate.search.testsupport.backend.LeakingBackendQueueProcessor;
+import org.hibernate.search.testsupport.setup.SearchConfigurationForTest;
+import org.junit.Test;
+
+import static org.fest.assertions.Assertions.assertThat;
+import static org.junit.Assert.assertEquals;
 
 /**
  * Verify the engine respects the depth parameter {@link IndexedEmbedded#depth()} without indexing larger graphs than
@@ -47,8 +38,9 @@ import org.hibernate.search.test.util.LeakingLuceneBackend;
  *
  * @author Sanne Grinovero
  */
-public class RecursiveGraphTest extends SearchTestCase {
+public class RecursiveGraphTest extends SearchTestBase {
 
+	@Test
 	public void testCorrectDepthIndexed() {
 		prepareGenealogyTree();
 		verifyMatchExistsWithName( 1L, "name", "John of England" );
@@ -58,17 +50,17 @@ public class RecursiveGraphTest extends SearchTestCase {
 		verifyMatchExistsWithName( 2L, "parents.parents.name", "Fulk V of Anjou" );
 		verifyNoMatchExists( "parents.parents.parents.name", "Fulk V of Anjou" );
 
-		LeakingLuceneBackend.reset();
+		LeakingBackendQueueProcessor.reset();
 		renamePerson( 1L, "John Lackland" );
 		assertEquals( 1, countWorksDoneOnPerson( 1L ) );
 		assertEquals( 0, countWorksDoneOnPerson( 2L ) );
 
-		LeakingLuceneBackend.reset();
+		LeakingBackendQueueProcessor.reset();
 		renamePerson( 2L, "Henry II of New England" );
 		assertEquals( 1, countWorksDoneOnPerson( 1L ) );
 		assertEquals( 1, countWorksDoneOnPerson( 2L ) );
 
-		LeakingLuceneBackend.reset();
+		LeakingBackendQueueProcessor.reset();
 		renamePerson( 16L, "Fulk 4th of Anjou" );
 		assertEquals( 1, countWorksDoneOnPerson( 16L ) );
 		assertEquals( 0, countWorksDoneOnPerson( 17L ) );
@@ -76,6 +68,19 @@ public class RecursiveGraphTest extends SearchTestCase {
 		assertEquals( 1, countWorksDoneOnPerson( 4L ) );
 		assertEquals( 0, countWorksDoneOnPerson( 2L ) );
 		assertEquals( 0, countWorksDoneOnPerson( 1L ) );
+	}
+
+	@Test(expected = SearchException.class)
+	public void testAgainstInfiniteTypeLoop() throws Exception {
+		final SearchConfigurationForTest configuration = new HibernateManualConfiguration()
+				.addClass( BrokenMammal.class );
+		try {
+			new SearchIntegratorBuilder().configuration( configuration ).buildSearchIntegrator();
+		}
+		catch (SearchException e) {
+			assertThat( e.getMessage() ).contains( "HSEARCH000221" );
+			throw e;
+		}
 	}
 
 	/**
@@ -174,7 +179,7 @@ public class RecursiveGraphTest extends SearchTestCase {
 	}
 
 	private int countWorksDoneOnPerson(Long pk) {
-		List<LuceneWork> processedQueue = LeakingLuceneBackend.getLastProcessedQueue();
+		List<LuceneWork> processedQueue = LeakingBackendQueueProcessor.getLastProcessedQueue();
 		int count = 0;
 		for ( LuceneWork luceneWork : processedQueue ) {
 			Serializable id = luceneWork.getId();
@@ -186,13 +191,13 @@ public class RecursiveGraphTest extends SearchTestCase {
 	}
 
 	@Override
-	protected Class<?>[] getAnnotatedClasses() {
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] { Person.class };
 	}
 
-	protected void configure(Configuration cfg) {
-		super.configure( cfg );
-		cfg.setProperty( "hibernate.search.default.worker.backend", LeakingLuceneBackend.class.getName() );
+	@Override
+	public void configure(Map<String,Object> cfg) {
+		cfg.put( "hibernate.search.default.worker.backend", LeakingBackendQueueProcessor.class.getName() );
 	}
 
 }

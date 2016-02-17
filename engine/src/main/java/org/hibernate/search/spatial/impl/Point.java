@@ -1,22 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.spatial.impl;
 
@@ -25,8 +11,8 @@ import org.hibernate.search.spatial.Coordinates;
 /**
  * Normalized latitude,longitude holder (in [-90;90],[-180,180]) with distance and destination computations methods
  *
- * @author Nicolas Helleringer <nicolas.helleringer@novacodex.net>
- * @author Mathieu Perez <mathieu.perez@novacodex.net>
+ * @author Nicolas Helleringer
+ * @author Mathieu Perez
  */
 public final class Point implements Coordinates {
 
@@ -69,7 +55,7 @@ public final class Point implements Coordinates {
 	 * @return longitude normalized in ]-180;+180]
 	 */
 	public static double normalizeLongitude(double longitude) {
-		if ( longitude ==  ( -GeometricConstants.LONGITUDE_DEGREE_RANGE / 2 ) ) {
+		if ( longitude == ( -GeometricConstants.LONGITUDE_DEGREE_RANGE / 2 ) ) {
 			return GeometricConstants.LONGITUDE_DEGREE_RANGE / 2 ;
 		}
 		else {
@@ -87,7 +73,7 @@ public final class Point implements Coordinates {
 			// shift 180 and normalize full circle turn
 			_longitude = ( ( longitude + ( GeometricConstants.LONGITUDE_DEGREE_RANGE / 2 ) ) % GeometricConstants.WHOLE_CIRCLE_DEGREE_RANGE );
 			// as Java % is not a math modulus we may have negative numbers so the unshift is sign dependant
-			if ( _longitude < 0) {
+			if ( _longitude < 0 ) {
 				_longitude = _longitude + ( GeometricConstants.LONGITUDE_DEGREE_RANGE / 2 );
 			}
 			else {
@@ -174,6 +160,7 @@ public final class Point implements Coordinates {
 	 * Compute distance between two points
 	 *
 	 * @param other a {@link org.hibernate.search.spatial.impl.Point} object.
+	 * @return the distance between points
 	 * @see <a href="http://www.movable-type.co.uk/scripts/latlong.html">Distance haversine formula</a>
 	 */
 	public double getDistanceTo(Point other) {
@@ -185,6 +172,7 @@ public final class Point implements Coordinates {
 	 *
 	 * @param latitude in decimal degrees
 	 * @param longitude in decimal degrees
+	 * @return the distance between the points
 	 * @see <a href="http://www.movable-type.co.uk/scripts/latlong.html">Distance haversine formula</a>
 	 */
 	public double getDistanceTo(final double latitude,final double longitude) {

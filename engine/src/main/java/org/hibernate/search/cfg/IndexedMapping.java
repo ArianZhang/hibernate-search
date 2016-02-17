@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.cfg;
 
@@ -27,9 +10,10 @@ import java.lang.annotation.ElementType;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.apache.solr.analysis.TokenizerFactory;
+import org.apache.lucene.analysis.util.TokenizerFactory;
 import org.hibernate.search.analyzer.Discriminator;
 import org.hibernate.search.annotations.FieldCacheType;
+import org.hibernate.search.bridge.FieldBridge;
 import org.hibernate.search.engine.BoostStrategy;
 import org.hibernate.search.indexes.interceptor.EntityIndexingInterceptor;
 
@@ -56,17 +40,15 @@ public class IndexedMapping {
 		return this;
 	}
 
+	/**
+	 * This feature will be removed, with no replacement
+	 * as caching fields is no longer effective.
+	 * @param type this argument will be ignored
+	 * @return {@code this} for method chaining
+	 * @deprecated This will be removed with no replacement.
+	 */
+	@Deprecated
 	public IndexedMapping cacheFromIndex(FieldCacheType... type) {
-		Map<String, Object> cacheInMemory = new HashMap<String, Object>( 1 );
-		cacheInMemory.put( "value", type );
-		entity.setCacheInMemory( cacheInMemory );
-		return this;
-	}
-
-	public IndexedMapping similarity(Class<?> impl) {
-		Map<String, Object> similarity = new HashMap<String, Object>( 1 );
-		similarity.put( "impl", impl );
-		entity.setSimilariy( similarity );
 		return this;
 	}
 
@@ -93,6 +75,20 @@ public class IndexedMapping {
 
 	public IndexedClassBridgeMapping classBridge(Class<?> impl) {
 		return new IndexedClassBridgeMapping( mapping, entity, impl, this );
+	}
+
+	/**
+	 * Registers the given class bridge for the currently configured entity type. Any subsequent analyzer, parameter
+	 * etc. configurations apply to this class bridge.
+	 *
+	 * @param instance a class bridge instance
+	 * @return a new {@link ClassBridgeMapping} following the method chaining pattern
+	 * @hsearch.experimental This method is considered experimental and it may be altered or removed in future releases
+	 * @throws org.hibernate.search.exception.SearchException in case the same bridge instance is passed more than once for the
+	 * currently configured entity type
+	 */
+	public IndexedClassBridgeMapping classBridgeInstance(FieldBridge instance) {
+		return new IndexedClassBridgeMapping( mapping, entity, instance, this );
 	}
 
 	public FullTextFilterDefMapping fullTextFilterDef(String name, Class<?> impl) {

@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.store.impl;
 
@@ -35,21 +18,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 
 import org.apache.lucene.store.FSDirectory;
-
-import org.hibernate.search.indexes.impl.DirectoryBasedIndexManager;
+import org.hibernate.search.exception.SearchException;
+import org.hibernate.search.indexes.spi.DirectoryBasedIndexManager;
+import org.hibernate.search.spi.BuildContext;
 import org.hibernate.search.store.DirectoryProvider;
+import org.hibernate.search.store.spi.DirectoryHelper;
 import org.hibernate.search.util.impl.FileHelper;
 import org.hibernate.search.util.logging.impl.Log;
-
-import org.hibernate.search.spi.BuildContext;
-import org.hibernate.search.SearchException;
 import org.hibernate.search.util.logging.impl.LoggerFactory;
 
 /**
  * File based DirectoryProvider that takes care of index copy
- * The base directory is represented by hibernate.search.<index>.indexBase
- * The index is created in <base directory>/<index name>
- * The source (aka copy) directory is built from <sourceBase>/<index name>
+ * The base directory is represented by hibernate.search.{@literal <index>}.indexBase
+ * The index is created in {@literal <base directory>/<index name>}
+ * The source (aka copy) directory is built from {@literal <sourceBase>/<index name>}
  *
  * A copy is triggered every refresh seconds
  *
@@ -89,11 +71,11 @@ public class FSMasterDirectoryProvider implements DirectoryProvider<FSDirectory>
 		//source guessing
 		sourceDir = DirectoryProviderHelper.getSourceDirectory( directoryProviderName, properties, true );
 		log.debugf( "Source directory: %s", sourceDir.getPath() );
-		indexDir = DirectoryProviderHelper.getVerifiedIndexDir( directoryProviderName, properties, true );
+		indexDir = DirectoryHelper.getVerifiedIndexDir( directoryProviderName, properties, true );
 		log.debugf( "Index directory: %s", indexDir.getPath() );
 		try {
 			indexName = indexDir.getCanonicalPath();
-			directory = DirectoryProviderHelper.createFSIndex( indexDir, properties );
+			directory = DirectoryProviderHelper.createFSIndex( indexDir, properties, context.getServiceManager() );
 		}
 		catch (IOException e) {
 			throw new SearchException( "Unable to initialize index: " + directoryProviderName, e );
@@ -136,6 +118,7 @@ public class FSMasterDirectoryProvider implements DirectoryProvider<FSDirectory>
 		this.current = currentLocal; //write to volatile to publish all state
 	}
 
+	@Override
 	public FSDirectory getDirectory() {
 		@SuppressWarnings("unused")
 		int readCurrentState = current; //Unneeded value, needed to ensure visibility of state protected by memory barrier
@@ -172,6 +155,7 @@ public class FSMasterDirectoryProvider implements DirectoryProvider<FSDirectory>
 		return 37 * hash + indexName.hashCode();
 	}
 
+	@Override
 	public void stop() {
 		@SuppressWarnings("unused")
 		int readCurrentState = current; //Another unneeded value, to ensure visibility of state protected by memory barrier
@@ -195,6 +179,7 @@ public class FSMasterDirectoryProvider implements DirectoryProvider<FSDirectory>
 			copyTask = new FSMasterDirectoryProvider.CopyDirectory( source, destination );
 		}
 
+		@Override
 		public void run() {
 			if ( copyTask.inProgress.compareAndSet( false, true ) ) {
 				executor.execute( copyTask );
@@ -219,6 +204,7 @@ public class FSMasterDirectoryProvider implements DirectoryProvider<FSDirectory>
 			this.destination = destination;
 		}
 
+		@Override
 		public void run() {
 			//TODO get rid of current and use the marker file instead?
 			directoryProviderLock.lock();
@@ -241,9 +227,9 @@ public class FSMasterDirectoryProvider implements DirectoryProvider<FSDirectory>
 					log.unableToRemovePreviousMarket( indexName );
 				}
 				try {
-					new File( destination, CURRENT_DIR_NAME[index]  ).createNewFile();
+					new File( destination, CURRENT_DIR_NAME[index] ).createNewFile();
 				}
-				catch ( IOException e ) {
+				catch (IOException e) {
 					log.unableToCreateCurrentMarker( indexName, e );
 				}
 				log.tracef( "Copy for %s took %d ms", indexName, TimeUnit.NANOSECONDS.toMillis( System.nanoTime() - start ) );

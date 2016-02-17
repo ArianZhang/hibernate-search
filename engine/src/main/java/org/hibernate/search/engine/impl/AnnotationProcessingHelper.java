@@ -1,49 +1,32 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2011, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.engine.impl;
 
+import java.lang.annotation.Annotation;
+
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.document.Field;
-
-import org.hibernate.annotations.common.AssertionFailure;
+import org.hibernate.annotations.common.reflection.XAnnotatedElement;
 import org.hibernate.annotations.common.reflection.XProperty;
-import org.hibernate.annotations.common.util.StringHelper;
-import org.hibernate.search.SearchException;
 import org.hibernate.search.annotations.Analyze;
 import org.hibernate.search.annotations.Boost;
 import org.hibernate.search.annotations.DynamicBoost;
 import org.hibernate.search.annotations.Index;
 import org.hibernate.search.annotations.Norms;
 import org.hibernate.search.annotations.NumericField;
+import org.hibernate.search.annotations.SortableField;
 import org.hibernate.search.annotations.Spatial;
 import org.hibernate.search.annotations.TermVector;
 import org.hibernate.search.engine.BoostStrategy;
-import org.hibernate.search.impl.ConfigContext;
+import org.hibernate.search.exception.AssertionFailure;
+import org.hibernate.search.exception.SearchException;
+import org.hibernate.search.util.StringHelper;
 import org.hibernate.search.util.impl.ClassLoaderHelper;
-
-import java.lang.annotation.Annotation;
 
 /**
  * A helper classes dealing with the processing of annotation. It is there to share some annotation processing
@@ -53,6 +36,10 @@ import java.lang.annotation.Annotation;
  * @author Hardy Ferentschik
  */
 public final class AnnotationProcessingHelper {
+
+	private AnnotationProcessingHelper() {
+		//not allowed
+	}
 
 	/**
 	 * Using the passed field (or class bridge) settings determines the Lucene {@link org.apache.lucene.document.Field.Index}
@@ -109,23 +96,16 @@ public final class AnnotationProcessingHelper {
 		return computedBoost;
 	}
 
-	public static BoostStrategy getDynamicBoost(XProperty member) {
-		DynamicBoost boostAnnotation = member.getAnnotation( DynamicBoost.class );
+	public static BoostStrategy getDynamicBoost(final XAnnotatedElement element) {
+		if ( element == null ) {
+			return DefaultBoostStrategy.INSTANCE;
+		}
+		DynamicBoost boostAnnotation = element.getAnnotation( DynamicBoost.class );
 		if ( boostAnnotation == null ) {
 			return DefaultBoostStrategy.INSTANCE;
 		}
-
 		Class<? extends BoostStrategy> boostStrategyClass = boostAnnotation.impl();
-		BoostStrategy strategy;
-		try {
-			strategy = boostStrategyClass.newInstance();
-		}
-		catch ( Exception e ) {
-			throw new SearchException(
-					"Unable to instantiate boost strategy implementation: " + boostStrategyClass.getName()
-			);
-		}
-		return strategy;
+		return ClassLoaderHelper.instanceFromClass( BoostStrategy.class, boostStrategyClass, "boost strategy" );
 	}
 
 	public static Field.TermVector getTermVector(TermVector vector) {
@@ -160,13 +140,13 @@ public final class AnnotationProcessingHelper {
 			try {
 				return ClassLoaderHelper.analyzerInstanceFromClass( analyzerClass, configContext.getLuceneMatchVersion() );
 			}
-			catch ( ClassCastException e ) {
+			catch (ClassCastException e) {
 				throw new SearchException(
 						"Lucene analyzer does not extend " + Analyzer.class.getName() + ": " + analyzerClass.getName(),
 						e
 				);
 			}
-			catch ( Exception e ) {
+			catch (Exception e) {
 				throw new SearchException(
 						"Failed to instantiate lucene analyzer with type " + analyzerClass.getName(), e
 				);
@@ -186,6 +166,12 @@ public final class AnnotationProcessingHelper {
 		else if ( fieldAnn instanceof Spatial ) {
 			fieldName = ( (Spatial) fieldAnn ).name();
 		}
+		else if ( fieldAnn instanceof SortableField ) {
+			fieldName = ( (SortableField) fieldAnn ).forField();
+		}
+		else if ( fieldAnn instanceof NumericField ) {
+			fieldName = ( (NumericField) fieldAnn ).forField();
+		}
 		else {
 			return raiseAssertionOnIncorrectAnnotation( fieldAnn );
 		}
@@ -193,8 +179,6 @@ public final class AnnotationProcessingHelper {
 	}
 
 	private static String raiseAssertionOnIncorrectAnnotation(Annotation fieldAnn) {
-		throw new AssertionFailure( "Cannot instances other than @Field and @Spatial. Found: " + fieldAnn.getClass() );
+		throw new AssertionFailure( "Cannot process instances other than @Field, @Spatial and @SortableField. Found: " + fieldAnn.getClass() );
 	}
 }
-
-

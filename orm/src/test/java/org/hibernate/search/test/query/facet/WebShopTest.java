@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2011, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.test.query.facet;
@@ -28,7 +11,6 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.lucene.search.Query;
-
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.hibernate.Transaction;
@@ -41,9 +23,13 @@ import org.hibernate.search.query.facet.FacetingRequest;
 import org.hibernate.search.query.facet.RangeFacet;
 import org.hibernate.search.util.logging.impl.Log;
 import org.hibernate.search.util.logging.impl.LoggerFactory;
+import org.junit.Test;
 
 import static org.hibernate.search.util.impl.CollectionHelper.newArrayList;
 import static org.hibernate.search.util.impl.CollectionHelper.newHashMap;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Simulate a web-shop with basic search which can be refined by facet requests.
@@ -54,9 +40,10 @@ public class WebShopTest extends AbstractFacetTest {
 
 	private static final Log log = LoggerFactory.make( Log.class );
 
+	@Test
 	public void testSimulateClient() {
 		// get hold of the search service
-		SearchService searchService = new SearchService( getSessions() );
+		SearchService searchService = new SearchService( getSessionFactory() );
 
 		// execute the search and display main query results
 		List<Car> cars = searchService.searchCar( "BMW" );
@@ -79,7 +66,6 @@ public class WebShopTest extends AbstractFacetTest {
 
 		// let the user select a facet menu
 		FacetMenuItem selectedItem = facetMenuItems.get( SearchService.colorFacetName ).get( 0 );
-		assertEquals( "Wrong facet value", "red", selectedItem.getValue() );
 		assertEquals( "Wrong facet count", 3, selectedItem.getCount() );
 
 		cars = searchService.selectMenuItem( selectedItem );
@@ -89,7 +75,7 @@ public class WebShopTest extends AbstractFacetTest {
 		facetMenuItems = searchService.getMenuItems();
 
 		colorMenuItems = facetMenuItems.get( SearchService.colorFacetName );
-		assertEquals( "Wrong number of menu entries", 4, colorMenuItems.size() );
+		assertEquals( "Wrong number of menu entries", 1, colorMenuItems.size() );
 		FacetMenuItem menuItem = colorMenuItems.get( 0 );
 		assertEquals( "Wrong facet count", 3, menuItem.getCount() );
 		assertTrue( menuItem.isSelected() );
@@ -106,6 +92,7 @@ public class WebShopTest extends AbstractFacetTest {
 	}
 
 
+	@Override
 	public void loadTestData(Session session) {
 		Transaction tx = session.beginTransaction();
 		List<Car> allCars = newArrayList();
@@ -123,7 +110,8 @@ public class WebShopTest extends AbstractFacetTest {
 		session.clear();
 	}
 
-	protected Class<?>[] getAnnotatedClasses() {
+	@Override
+	public Class<?>[] getAnnotatedClasses() {
 		return new Class[] {
 				Car.class,
 		};
@@ -131,12 +119,12 @@ public class WebShopTest extends AbstractFacetTest {
 
 	public static class SearchService {
 		public static final String colorFacetName = "color";
-		public static final String cubicCapacityFacetName = "cubicCapacity";
-		private SessionFactory factory;
+		public static final String cubicCapacityFacetName = "cubicCapacity_Numeric";
+		private final SessionFactory factory;
 		private FullTextQuery currentFullTextQuery;
 		private Map<String, List<FacetMenuItem>> menuItems;
 		private String queryString;
-		private List<Facet> selectedFacets = newArrayList();
+		private final List<Facet> selectedFacets = newArrayList();
 
 		public SearchService(SessionFactory factory) {
 			this.factory = factory;
@@ -183,7 +171,7 @@ public class WebShopTest extends AbstractFacetTest {
 			// range faceting
 			final FacetingRequest priceFacet = builder.facet()
 					.name( cubicCapacityFacetName )
-					.onField( "cubicCapacity" )
+					.onField( "cubicCapacity_Numeric" )
 					.range()
 					.below( 2500 ).excludeLimit()
 					.from( 2500 ).to( 3000 )
@@ -231,7 +219,7 @@ public class WebShopTest extends AbstractFacetTest {
 			// use the facet to narrow down the query
 			currentFullTextQuery.getFacetManager()
 					.getFacetGroup( item.getFacetingName() )
-					.selectFacets( selectedFacets.toArray( new Facet[] { } ) );
+					.selectFacets( selectedFacets.toArray( new Facet[selectedFacets.size()] ) );
 			List<Car> cars = currentFullTextQuery.list();
 			tx.commit();
 			fullTextSession.close();

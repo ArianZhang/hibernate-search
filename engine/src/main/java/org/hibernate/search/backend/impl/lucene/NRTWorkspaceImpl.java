@@ -1,22 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.backend.impl.lucene;
 
@@ -27,18 +13,20 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
+import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
-
-import org.hibernate.annotations.common.AssertionFailure;
 import org.hibernate.search.backend.AddLuceneWork;
 import org.hibernate.search.backend.DeleteLuceneWork;
 import org.hibernate.search.backend.FlushLuceneWork;
+import org.hibernate.search.backend.IndexWorkVisitor;
 import org.hibernate.search.backend.LuceneWork;
 import org.hibernate.search.backend.OptimizeLuceneWork;
 import org.hibernate.search.backend.PurgeAllLuceneWork;
 import org.hibernate.search.backend.UpdateLuceneWork;
-import org.hibernate.search.backend.impl.WorkVisitor;
-import org.hibernate.search.indexes.impl.DirectoryBasedIndexManager;
+import org.hibernate.search.backend.impl.CommitPolicy;
+import org.hibernate.search.backend.spi.DeleteByQueryLuceneWork;
+import org.hibernate.search.exception.AssertionFailure;
+import org.hibernate.search.indexes.spi.DirectoryBasedIndexManager;
 import org.hibernate.search.indexes.spi.DirectoryBasedReaderProvider;
 import org.hibernate.search.spi.WorkerBuildContext;
 import org.hibernate.search.util.logging.impl.Log;
@@ -48,20 +36,20 @@ import org.hibernate.search.util.logging.impl.LoggerFactory;
  * A {@code Workspace} implementation taking advantage of NRT Lucene features.
  * {@code IndexReader} instances are obtained directly from the {@code IndexWriter}, which is not forced
  * to flush all pending changes to the {@code Directory} structure.
- * <p/>
+ * <p>
  *
  * Lucene requires in its current version to flush delete operations, or the {@code IndexReader}s
  * retrieved via NRT will include deleted Document instances in queries; flushing delete operations
  * happens to be quite expensive so this {@code Workspace} implementation attempts to detect when such
  * a flush operation is needed.
- * <p/>
+ * <p>
  *
  * Applying write operations flags "indexReader requirements" with needs for either normal flush
  * or flush including deletes, but does not update {@code IndexReader} instances. The {@code IndexReader}s
  * are updated only if and when a fresh {@code IndexReader} is requested via {@link #openIndexReader()}.
  * This method will check if it can return the last opened {@code IndexReader} or in case of the reader being stale
  * open a fresh reader from the current {@code IndexWriter}.
- * <p/>
+ * <p>
  *
  * Generation counters are used to track need-at-least version versus last-updated-at version:
  * shared state is avoided between index writers and reader threads to avoid high complexity.
@@ -69,27 +57,28 @@ import org.hibernate.search.util.logging.impl.LoggerFactory;
  * the index to be dirty without triggering an actual {@code IndexReader} refresh, so the version counters
  * can have gaps: method {@link #refreshReaders()} will always jump to latest seen version, as it will
  * refresh the index to satisfy both kinds of flush requirements (writes and deletes).
- * <p/>
+ * <p>
  *
  * We keep a reference {@code IndexReader} in the {@link #currentReader} atomic reference as a fast path
  * for multiple read events when the index is not dirty.
- * <p/>
+ * <p>
  *
  * This class implements both {@code Workspace} and {@code ReaderProvider}.
  *
- * @author Sanne Grinovero <sanne@hibernate.org> (C) 2011 Red Hat Inc.
+ * @author Sanne Grinovero (C) 2011 Red Hat Inc.
  */
 public class NRTWorkspaceImpl extends AbstractWorkspaceImpl implements DirectoryBasedReaderProvider {
 
 	private static final Log log = LoggerFactory.make();
 
 	private final ReentrantLock writeLock = new ReentrantLock();
-	private final AtomicReference<IndexReader> currentReader = new AtomicReference<IndexReader>();
+	private final AtomicReference<DirectoryReader> currentReader = new AtomicReference<DirectoryReader>();
+	private final CommitPolicy commitPolicy = new NRTCommitPolicy( writerHolder );
 
 	/**
-	 * Visits {@code LuceneWork} types to determine the kind of flushing we need to apply on the indexes
+	 * Visits {@code LuceneWork} types and applies the required kind of index flushing
 	 */
-	private final FlushStrategySelector flushStrategySelector = new FlushStrategySelector();
+	private final FlushStrategyExecutor flushStrategySelector = new FlushStrategyExecutor();
 
 	/**
 	 * Set to true when this service is shutdown (not revertible)
@@ -138,10 +127,8 @@ public class NRTWorkspaceImpl extends AbstractWorkspaceImpl implements Directory
 
 	@Override
 	public void afterTransactionApplied(boolean someFailureHappened, boolean streaming) {
-		if ( someFailureHappened ) {
-			writerHolder.forceLockRelease();
-		}
-		else if ( !streaming ) {
+		commitPolicy.onChangeSetApplied( someFailureHappened, streaming );
+		if ( ! streaming ) {
 			setupNewReadersRequirements();
 		}
 	}
@@ -175,7 +162,7 @@ public class NRTWorkspaceImpl extends AbstractWorkspaceImpl implements Directory
 	 *
 	 * @return the refreshed {@code IndexReader}
 	 */
-	private synchronized IndexReader refreshReaders() {
+	private synchronized DirectoryReader refreshReaders() {
 		//double-check for the case we don't need anymore to refresh
 		if ( indexReaderIsFresh() ) {
 			return currentReader.get();
@@ -186,15 +173,15 @@ public class NRTWorkspaceImpl extends AbstractWorkspaceImpl implements Directory
 		final boolean flushDeletes = currentReaderGen < readerGenRequiringFlushDeletes;
 		final long openingGen = Math.max( readerGenRequiringFlushDeletes, readerGenRequiringFlushWrites );
 
-		final IndexReader newIndexReader = writerHolder.openNRTIndexReader( flushDeletes );
-		final IndexReader oldReader = currentReader.getAndSet( newIndexReader );
+		final DirectoryReader newIndexReader = writerHolder.openNRTIndexReader( flushDeletes );
+		final DirectoryReader oldReader = currentReader.getAndSet( newIndexReader );
 		this.currentReaderGen = openingGen;
 		try {
 			if ( oldReader != null ) {
 				oldReader.decRef();
 			}
 		}
-		catch ( IOException e ) {
+		catch (IOException e) {
 			log.unableToCloseLuceneIndexReader( e );
 		}
 		return newIndexReader;
@@ -207,7 +194,7 @@ public class NRTWorkspaceImpl extends AbstractWorkspaceImpl implements Directory
 	}
 
 	@Override
-	public IndexReader openIndexReader() {
+	public DirectoryReader openIndexReader() {
 		return openIndexReader( ! indexReaderIsFresh() );
 	}
 
@@ -215,8 +202,8 @@ public class NRTWorkspaceImpl extends AbstractWorkspaceImpl implements Directory
 	 * @param needRefresh when {@code false} it won't guarantee the index reader to be affected by "latest" changes
 	 * @return returns an {@code IndexReader} instance, either pooled or a new one
 	 */
-	private IndexReader openIndexReader(final boolean needRefresh) {
-		IndexReader indexReader;
+	private DirectoryReader openIndexReader(final boolean needRefresh) {
+		DirectoryReader indexReader;
 		if ( needRefresh ) {
 			indexReader = refreshReaders();
 		}
@@ -260,7 +247,7 @@ public class NRTWorkspaceImpl extends AbstractWorkspaceImpl implements Directory
 			//don't use IndexReader#close as it prevents further counter decrements!
 			reader.decRef();
 		}
-		catch ( IOException e ) {
+		catch (IOException e) {
 			log.unableToCloseLuceneIndexReader( e );
 		}
 	}
@@ -286,53 +273,70 @@ public class NRTWorkspaceImpl extends AbstractWorkspaceImpl implements Directory
 	public void flush() {
 		//Even if this is the NRT workspace, Flush is implemented as a real Flush to make sure
 		//MassIndexer output is committed to permanent storage
-		writerHolder.commitIndexWriter();
+		commitPolicy.onFlush();
 	}
 
 	@Override
 	public void notifyWorkApplied(LuceneWork work) {
 		incrementModificationCounter();
-		work.getWorkDelegate( flushStrategySelector ).apply( this );
+		work.acceptIndexWorkVisitor( flushStrategySelector, this );
+	}
+
+	@Override
+	public CommitPolicy getCommitPolicy() {
+		return commitPolicy;
 	}
 
 	/**
-	 * Visits each kind of {@code LuceneWork} we're processing to define which kind
-	 * of flushing strategy we need to apply to create consistent index readers.
+	 * Visits each kind of {@code LuceneWork} we're processing and applies the correct flushing strategy to create
+	 * consistent index readers.
 	 */
-	private static class FlushStrategySelector implements WorkVisitor<FlushStrategyNeed> {
+	private static class FlushStrategyExecutor implements IndexWorkVisitor<NRTWorkspaceImpl, Void> {
 
 		@Override
-		public FlushStrategyNeed getDelegate(AddLuceneWork addLuceneWork) {
-			return FlushStrategyNeed.FLUSH_WRITES;
+		public Void visitAddWork(AddLuceneWork addLuceneWork, NRTWorkspaceImpl p) {
+			FlushStrategy.FLUSH_WRITES.apply( p );
+			return null;
 		}
 
 		@Override
-		public FlushStrategyNeed getDelegate(DeleteLuceneWork deleteLuceneWork) {
-			return FlushStrategyNeed.FLUSH_DELETIONS;
+		public Void visitDeleteWork(DeleteLuceneWork deleteLuceneWork, NRTWorkspaceImpl p) {
+			FlushStrategy.FLUSH_DELETIONS.apply( p );
+			return null;
 		}
 
 		@Override
-		public FlushStrategyNeed getDelegate(OptimizeLuceneWork optimizeLuceneWork) {
-			return FlushStrategyNeed.NONE;
+		public Void visitOptimizeWork(OptimizeLuceneWork optimizeLuceneWork, NRTWorkspaceImpl p) {
+			FlushStrategy.NONE.apply( p );
+			return null;
 		}
 
 		@Override
-		public FlushStrategyNeed getDelegate(PurgeAllLuceneWork purgeAllLuceneWork) {
-			return FlushStrategyNeed.FLUSH_DELETIONS;
+		public Void visitPurgeAllWork(PurgeAllLuceneWork purgeAllLuceneWork, NRTWorkspaceImpl p) {
+			FlushStrategy.FLUSH_DELETIONS.apply( p );
+			return null;
 		}
 
 		@Override
-		public FlushStrategyNeed getDelegate(UpdateLuceneWork updateLuceneWork) {
-			return FlushStrategyNeed.FLUSH_WRITES_AND_DELETES;
+		public Void visitUpdateWork(UpdateLuceneWork updateLuceneWork, NRTWorkspaceImpl p) {
+			FlushStrategy.FLUSH_WRITES_AND_DELETES.apply( p );
+			return null;
 		}
 
 		@Override
-		public FlushStrategyNeed getDelegate(FlushLuceneWork flushLuceneWork) {
-			return FlushStrategyNeed.FLUSH_WRITES_AND_DELETES;
+		public Void visitFlushWork(FlushLuceneWork flushLuceneWork, NRTWorkspaceImpl p) {
+			FlushStrategy.FLUSH_WRITES_AND_DELETES.apply( p );
+			return null;
+		}
+
+		@Override
+		public Void visitDeleteByQueryWork(DeleteByQueryLuceneWork deleteByQueryLuceneWork, NRTWorkspaceImpl p) {
+			FlushStrategy.FLUSH_DELETIONS.apply( p );
+			return null;
 		}
 	}
 
-	private enum FlushStrategyNeed {
+	private enum FlushStrategy {
 		NONE {
 			@Override
 			void apply(final NRTWorkspaceImpl workspace) {

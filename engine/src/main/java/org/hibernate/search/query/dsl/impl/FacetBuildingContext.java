@@ -1,38 +1,23 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2011, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.query.dsl.impl;
 
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 
-import org.hibernate.search.SearchException;
-import org.hibernate.search.engine.spi.DocumentBuilderIndexedEntity;
-import org.hibernate.search.engine.spi.EntityIndexBinder;
-import org.hibernate.search.engine.spi.SearchFactoryImplementor;
+import org.hibernate.search.engine.integration.impl.ExtendedSearchIntegrator;
+import org.hibernate.search.engine.spi.EntityIndexBinding;
 import org.hibernate.search.query.facet.FacetSortOrder;
 import org.hibernate.search.query.facet.FacetingRequest;
+import org.hibernate.search.util.StringHelper;
+import org.hibernate.search.util.logging.impl.Log;
+import org.hibernate.search.util.logging.impl.LoggerFactory;
 
 import static org.hibernate.search.util.impl.CollectionHelper.newArrayList;
 
@@ -40,27 +25,27 @@ import static org.hibernate.search.util.impl.CollectionHelper.newArrayList;
  * @author Hardy Ferentschik
  */
 class FacetBuildingContext<T> {
+	private static final Log log = LoggerFactory.make();
+
 	/**
 	 * The list of types which are supported for range faceting
 	 */
-	private static final List<Class<?>> allowedRangeTypes = newArrayList();
+	private static final List<String> allowedRangeTypes = Arrays.asList(
+			String.class.getName(),
+			Integer.class.getName(),
+			Long.class.getName(),
+			Double.class.getName(),
+			Float.class.getName(),
+			Date.class.getName()
+		);
 
-	static {
-		allowedRangeTypes.add( String.class );
-		allowedRangeTypes.add( Integer.class );
-		allowedRangeTypes.add( Long.class );
-		allowedRangeTypes.add( Double.class );
-		allowedRangeTypes.add( Float.class );
-		allowedRangeTypes.add( Date.class );
-	}
-
-	private final SearchFactoryImplementor factory;
+	private final ExtendedSearchIntegrator factory;
 	private final Class<?> entityType;
 
 	private String name;
 	private String fieldName;
 	private FacetSortOrder sort = FacetSortOrder.COUNT_DESC;
-	private boolean includeZeroCount = true;
+	private boolean includeZeroCount = false;
 	private boolean isRangeQuery = false;
 	private List<FacetRange<T>> rangeList = newArrayList();
 	private T rangeStart;
@@ -68,9 +53,8 @@ class FacetBuildingContext<T> {
 	private T rangeEnd;
 	private boolean includeRangeEnd = true;
 	private int maxFacetCount = -1;
-	private DocumentBuilderIndexedEntity<?> documentBuilder;
 
-	public FacetBuildingContext(SearchFactoryImplementor factory, Class<?> entityType) {
+	public FacetBuildingContext(ExtendedSearchIntegrator factory, Class<?> entityType) {
 		this.factory = factory;
 		this.entityType = entityType;
 	}
@@ -125,8 +109,7 @@ class FacetBuildingContext<T> {
 				rangeEnd,
 				includeRangeStart,
 				includeRangeEnd,
-				fieldName,
-				documentBuilder
+				fieldName
 		);
 		rangeList.add( facetRange );
 		rangeStart = null;
@@ -136,14 +119,17 @@ class FacetBuildingContext<T> {
 	}
 
 	private void assertValidRangeType(Class<?> clazz) {
-		if ( !allowedRangeTypes.contains( clazz ) ) {
-			throw new SearchException( "Unsupported range type: " + clazz.getName() );
+		if ( !allowedRangeTypes.contains( clazz.getName() ) ) {
+			throw log.unsupportedParameterTypeForRangeFaceting(
+					clazz.getName(),
+					StringHelper.join( allowedRangeTypes, "," )
+			);
 		}
 	}
 
 	private Class<?> getRangeType() {
 		if ( rangeStart == null && rangeEnd == null ) {
-			throw new SearchException( "You have to at least specify a start or end of the range" );
+			throw log.noStartOrEndSpecifiedForRangeQuery( name );
 		}
 		T tmp = rangeStart;
 		if ( tmp == null ) {
@@ -155,14 +141,11 @@ class FacetBuildingContext<T> {
 	FacetingRequest getFacetingRequest() {
 		FacetingRequestImpl request;
 		if ( isRangeQuery ) {
-			request = new RangeFacetRequest<T>( name, fieldName, rangeList, documentBuilder );
+			request = new RangeFacetRequest<>( name, fieldName, rangeList );
 		}
 		else {
-			if ( FacetSortOrder.RANGE_DEFINITION_ODER.equals( sort )
-					|| FacetSortOrder.RANGE_DEFINITION_ORDER.equals( sort ) ) {
-				throw new SearchException(
-						"RANGE_DEFINITION_ORDER is not a valid sort order for a discrete faceting request."
-				);
+			if ( FacetSortOrder.RANGE_DEFINITION_ORDER.equals( sort ) ) {
+				throw log.rangeDefinitionOrderRequestedForDiscreteFacetRequest();
 			}
 			request = new DiscreteFacetRequest( name, fieldName );
 		}
@@ -177,14 +160,10 @@ class FacetBuildingContext<T> {
 			throw new IllegalArgumentException( "null is an invalid field name" );
 		}
 
-		EntityIndexBinder indexBinding = factory.getIndexBindingForEntity( entityType );
+		EntityIndexBinding indexBinding = factory.getIndexBinding( entityType );
 		if ( indexBinding == null ) {
-			throw new SearchException(
-					"Entity " + entityType.getName()
-							+ " is not an indexed entity. Unable to create faceting request"
-			);
+			throw log.attemptToCreateFacetingRequestForUnindexedEntity( entityType.getName() );
 		}
-		documentBuilder = indexBinding.getDocumentBuilder();
 	}
 
 	@Override

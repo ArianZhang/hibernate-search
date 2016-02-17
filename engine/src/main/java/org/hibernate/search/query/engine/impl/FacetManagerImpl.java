@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2011, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.query.engine.impl;
 
@@ -38,6 +21,7 @@ import org.hibernate.search.query.dsl.impl.FacetingRequestImpl;
 import org.hibernate.search.query.engine.spi.DocumentExtractor;
 import org.hibernate.search.query.engine.spi.FacetManager;
 import org.hibernate.search.query.facet.Facet;
+import org.hibernate.search.query.facet.FacetCombine;
 import org.hibernate.search.query.facet.FacetSelection;
 import org.hibernate.search.query.facet.FacetingRequest;
 
@@ -74,18 +58,20 @@ public class FacetManagerImpl implements FacetManager {
 	/**
 	 * The query from which this manager was retrieved
 	 */
-	private final HSQueryImpl query;
+	private final LuceneHSQuery query;
 
-	FacetManagerImpl(HSQueryImpl query) {
+	FacetManagerImpl(LuceneHSQuery query) {
 		this.query = query;
 	}
 
+	@Override
 	public FacetManager enableFaceting(FacetingRequest facetingRequest) {
 		facetRequests.put( facetingRequest.getFacetingName(), (FacetingRequestImpl) facetingRequest );
 		queryHasChanged();
 		return this;
 	}
 
+	@Override
 	public void disableFaceting(String facetingName) {
 		facetRequests.remove( facetingName );
 		if ( facetResults != null ) {
@@ -94,6 +80,7 @@ public class FacetManagerImpl implements FacetManager {
 		queryHasChanged();
 	}
 
+	@Override
 	public List<Facet> getFacets(String facetingName) {
 		// if there are no facet requests we don't have to do anything
 		if ( facetRequests.isEmpty() || !facetRequests.containsKey( facetingName ) ) {
@@ -110,11 +97,11 @@ public class FacetManagerImpl implements FacetManager {
 		DocumentExtractor queryDocumentExtractor = query.queryDocumentExtractor();
 		queryDocumentExtractor.close();
 		//handle edge case of an empty index
-		if (facetResults == null) {
+		if ( facetResults == null ) {
 			return Collections.emptyList();
 		}
 		List<Facet> results = facetResults.get( facetingName );
-		if (results != null) {
+		if ( results != null ) {
 			return results;
 		}
 		else {
@@ -122,6 +109,7 @@ public class FacetManagerImpl implements FacetManager {
 		}
 	}
 
+	@Override
 	public FacetSelection getFacetGroup(String groupName) {
 		if ( groupName == null ) {
 			throw new IllegalArgumentException( "null is not a valid facet selection group name" );
@@ -165,32 +153,50 @@ public class FacetManagerImpl implements FacetManager {
 	}
 
 	private Query createSelectionGroupQuery(FacetSelectionImpl selection) {
-		BooleanQuery orQuery = new BooleanQuery();
+		BooleanQuery boolQuery = new BooleanQuery();
 		for ( Facet facet : selection.getFacetList() ) {
-			orQuery.add( facet.getFacetQuery(), BooleanClause.Occur.SHOULD );
+			boolQuery.add( facet.getFacetQuery(), selection.getOccurType() );
 		}
-		return orQuery;
+		return boolQuery;
 	}
 
 	class FacetSelectionImpl implements FacetSelection {
 		private final List<Facet> facetList = newArrayList();
 
+		private BooleanClause.Occur occurType = BooleanClause.Occur.SHOULD;
+
 		public List<Facet> getFacetList() {
 			return facetList;
 		}
 
+		@Override
 		public void selectFacets(Facet... facets) {
+			selectFacets( FacetCombine.OR, facets );
+		}
+
+		@Override
+		public void selectFacets(FacetCombine combineBy, Facet... facets) {
 			if ( facets == null ) {
 				return;
 			}
+
+			if ( FacetCombine.OR.equals( combineBy ) ) {
+				occurType = BooleanClause.Occur.SHOULD;
+			}
+			else {
+				occurType = BooleanClause.Occur.MUST;
+			}
+
 			facetList.addAll( Arrays.asList( facets ) );
 			queryHasChanged();
 		}
 
+		@Override
 		public List<Facet> getSelectedFacets() {
 			return Collections.unmodifiableList( facetList );
 		}
 
+		@Override
 		public void deselectFacets(Facet... facets) {
 			boolean hasChanged = facetList.removeAll( Arrays.asList( facets ) );
 			if ( hasChanged ) {
@@ -198,9 +204,14 @@ public class FacetManagerImpl implements FacetManager {
 			}
 		}
 
+		@Override
 		public void clearSelectedFacets() {
 			facetList.clear();
 			queryHasChanged();
+		}
+
+		public BooleanClause.Occur getOccurType() {
+			return occurType;
 		}
 	}
 }

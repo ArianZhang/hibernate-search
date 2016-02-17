@@ -1,43 +1,26 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.backend.impl;
 
+import java.util.concurrent.ConcurrentMap;
+
 import javax.transaction.Status;
-import javax.transaction.Synchronization;
 
 import org.hibernate.search.backend.spi.Work;
-import org.hibernate.search.engine.spi.SearchFactoryImplementor;
-import org.hibernate.search.util.impl.WeakIdentityHashMap;
+import org.hibernate.search.engine.integration.impl.ExtendedSearchIntegrator;
 import org.hibernate.search.util.logging.impl.Log;
 import org.hibernate.search.util.logging.impl.LoggerFactory;
 
 /**
- * Execute some work inside a transaction synchronization
+ * Execute final work in the after transaction synchronization.
  *
  * @author Emmanuel Bernard
  */
-public class PostTransactionWorkQueueSynchronization implements Synchronization {
+public class PostTransactionWorkQueueSynchronization implements WorkQueueSynchronization {
 
 	private static final Log log = LoggerFactory.make();
 
@@ -50,17 +33,17 @@ public class PostTransactionWorkQueueSynchronization implements Synchronization 
 	private final QueueingProcessor queueingProcessor;
 	private boolean consumed;
 	private boolean prepared;
-	private final WeakIdentityHashMap queuePerTransaction;
+	private final ConcurrentMap<Object, WorkQueueSynchronization> queuePerTransaction;
 	private final WorkQueue queue;
+	private final Object transactionIdentifier;
 
-	/**
-	 * in transaction work
-	 */
-	public PostTransactionWorkQueueSynchronization(QueueingProcessor queueingProcessor, WeakIdentityHashMap queuePerTransaction,
-			SearchFactoryImplementor searchFactoryImplementor) {
+	public PostTransactionWorkQueueSynchronization(Object transactionIdentifier, QueueingProcessor queueingProcessor,
+			ConcurrentMap<Object, WorkQueueSynchronization> queuePerTransaction,
+			ExtendedSearchIntegrator extendedIntegrator) {
+		this.transactionIdentifier = transactionIdentifier;
 		this.queueingProcessor = queueingProcessor;
 		this.queuePerTransaction = queuePerTransaction;
-		queue = new WorkQueue( searchFactoryImplementor );
+		queue = new WorkQueue( extendedIntegrator );
 	}
 
 	public void add(Work work) {
@@ -71,41 +54,31 @@ public class PostTransactionWorkQueueSynchronization implements Synchronization 
 		return consumed;
 	}
 
+	@Override
 	public void beforeCompletion() {
 		if ( prepared ) {
-			if ( log.isTraceEnabled() ) {
-				log.tracef(
-						"Transaction's beforeCompletion() phase already been processed, ignoring: %s", this.toString()
-				);
-			}
+			log.tracef( "Transaction's beforeCompletion() phase already been processed, ignoring: %s", this );
 		}
 		else {
-			if ( log.isTraceEnabled() ) {
-				log.tracef( "Processing Transaction's beforeCompletion() phase: %s", this.toString() );
-			}
+			log.tracef( "Processing Transaction's beforeCompletion() phase: %s", this );
 			queueingProcessor.prepareWorks( queue );
 			prepared = true;
 		}
 	}
 
+	@Override
 	public void afterCompletion(int i) {
 		try {
 			if ( Status.STATUS_COMMITTED == i ) {
-				if ( log.isTraceEnabled() ) {
-					log.tracef(
-							"Processing Transaction's afterCompletion() phase for %s. Performing work.", this.toString()
-					);
-				}
+				log.tracef( "Processing Transaction's afterCompletion() phase for %s. Performing work.", this );
 				queueingProcessor.performWorks( queue );
 			}
 			else {
-				if ( log.isTraceEnabled() ) {
-					log.tracef(
-							"Processing Transaction's afterCompletion() phase for %s. Cancelling work due to transaction status %d",
-							this.toString(),
-							i
-					);
-				}
+				log.tracef(
+						"Processing Transaction's afterCompletion() phase for %s. Cancelling work due to transaction status %d",
+						this,
+						i
+				);
 				queueingProcessor.cancelWorks( queue );
 			}
 		}
@@ -114,7 +87,7 @@ public class PostTransactionWorkQueueSynchronization implements Synchronization 
 			//clean the Synchronization per Transaction
 			//not needed stricto sensus but a cleaner approach and faster than the GC
 			if ( queuePerTransaction != null ) {
-				queuePerTransaction.removeValue( this );
+				queuePerTransaction.remove( transactionIdentifier );
 			}
 		}
 	}

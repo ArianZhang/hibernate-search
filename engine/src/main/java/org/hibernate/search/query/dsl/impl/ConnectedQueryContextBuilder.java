@@ -1,37 +1,21 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.query.dsl.impl;
 
 import java.util.Set;
 
-import org.hibernate.search.SearchException;
-import org.hibernate.search.engine.spi.SearchFactoryImplementor;
+import org.hibernate.search.engine.integration.impl.ExtendedSearchIntegrator;
 import org.hibernate.search.query.dsl.EntityContext;
 import org.hibernate.search.query.dsl.QueryBuilder;
 import org.hibernate.search.query.dsl.QueryContextBuilder;
 import org.hibernate.search.util.impl.ScopedAnalyzer;
+import org.hibernate.search.util.logging.impl.Log;
+import org.hibernate.search.util.logging.impl.LoggerFactory;
 
 /**
  * Assuming connection with the search factory
@@ -39,9 +23,12 @@ import org.hibernate.search.util.impl.ScopedAnalyzer;
  * @author Emmanuel Bernard
  */
 public class ConnectedQueryContextBuilder implements QueryContextBuilder {
-	private final SearchFactoryImplementor factory;
 
-	public ConnectedQueryContextBuilder(SearchFactoryImplementor factory) {
+	private static final Log log = LoggerFactory.make();
+
+	private final ExtendedSearchIntegrator factory;
+
+	public ConnectedQueryContextBuilder(ExtendedSearchIntegrator factory) {
 		this.factory = factory;
 	}
 
@@ -54,20 +41,17 @@ public class ConnectedQueryContextBuilder implements QueryContextBuilder {
 		private final ScopedAnalyzer queryAnalyzer;
 		private final QueryBuildingContext context;
 
-		public HSearchEntityContext(Class<?> entityType, SearchFactoryImplementor factory) {
+		public HSearchEntityContext(Class<?> entityType, ExtendedSearchIntegrator factory) {
 			// get a type for meta-data retrieval; if the given type itself is not indexed, one indexed sub-type will
 			// be used; note that this allows to e.g. query for fields not present on the given type but on one of its
 			// sub-types, but we accept this for now
 			Class<?> indexBoundType = getIndexBoundType( entityType, factory );
 
 			if ( indexBoundType == null ) {
-				throw new SearchException( String.format( "Can't build query for type %s which is"
-						+ " neither indexed nor has any indexed sub-types.",
-						entityType.getCanonicalName() ) );
+				throw log.cantQueryUnindexedType( entityType.getCanonicalName() );
 			}
 
-			queryAnalyzer = new ScopedAnalyzer();
-			queryAnalyzer.setGlobalAnalyzer( factory.getAnalyzer( indexBoundType ) );
+			queryAnalyzer = new ScopedAnalyzer( factory.getAnalyzer( indexBoundType ) );
 			context = new QueryBuildingContext( factory, queryAnalyzer, indexBoundType );
 		}
 
@@ -79,8 +63,8 @@ public class ConnectedQueryContextBuilder implements QueryContextBuilder {
 		 * @return the given type itself if it is indexed, otherwise the first found indexed sub-type or {@code null} if
 		 * neither the given type nor any of its sub-types are indexed
 		 */
-		private Class<?> getIndexBoundType(Class<?> entityType, SearchFactoryImplementor factory) {
-			if ( factory.getIndexBindingForEntity( entityType ) != null ) {
+		private Class<?> getIndexBoundType(Class<?> entityType, ExtendedSearchIntegrator factory) {
+			if ( factory.getIndexBinding( entityType ) != null ) {
 				return entityType;
 			}
 

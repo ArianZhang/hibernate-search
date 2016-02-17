@@ -1,34 +1,18 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.filter.impl;
 
 import java.io.IOException;
 
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.LeafReader;
+import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.DocIdSet;
 import org.apache.lucene.search.Filter;
-
+import org.apache.lucene.util.Bits;
 import org.hibernate.search.util.impl.SoftLimitMRUCache;
 import org.hibernate.search.util.logging.impl.Log;
 import org.hibernate.search.util.logging.impl.LoggerFactory;
@@ -39,8 +23,9 @@ import org.hibernate.search.util.logging.impl.LoggerFactory;
  * the filter <code>BitSet</code>.
  *
  * @author Hardy Ferentschik
+ * @author Sanne Grinovero
  * @see org.apache.lucene.search.CachingWrapperFilter
- * @see <a href="http://opensource.atlassian.com/projects/hibernate/browse/HSEARCH-174">HSEARCH-174</a>
+ * @see <a href="https://hibernate.atlassian.net/browse/HSEARCH-174">HSEARCH-174</a>
  */
 @SuppressWarnings("serial")
 public class CachingWrapperFilter extends Filter {
@@ -48,6 +33,13 @@ public class CachingWrapperFilter extends Filter {
 	private static final Log log = LoggerFactory.make();
 
 	public static final int DEFAULT_SIZE = 5;
+
+	/**
+	 * Any Filter could return null as a value representing an empty match set,
+	 * we need to use NULL_OBJECT as a marker token to be able to cache this
+	 * return value.
+	 */
+	private static final Object NULL_OBJECT = new Object();
 
 	/**
 	 * The cache using soft references in order to store the filter bit sets.
@@ -83,26 +75,45 @@ public class CachingWrapperFilter extends Filter {
 	}
 
 	@Override
-	public DocIdSet getDocIdSet(IndexReader reader) throws IOException {
-		DocIdSet cached = (DocIdSet) cache.get( reader );
+	public DocIdSet getDocIdSet(LeafReaderContext context, Bits acceptDocs) throws IOException {
+		final LeafReader reader = context.reader();
+		Object cached = cache.get( reader );
 		if ( cached != null ) {
-			return cached;
+			if ( cached == NULL_OBJECT ) {
+				return null;
+			}
+			else {
+				return (DocIdSet) cached;
+			}
 		}
 		synchronized ( cache ) {
-			cached = (DocIdSet) cache.get( reader );
+			cached = cache.get( reader );
 			if ( cached != null ) {
-				return cached;
+				if ( cached == NULL_OBJECT ) {
+					return null;
+				}
+				else {
+					return (DocIdSet) cached;
+				}
 			}
-			final DocIdSet docIdSet = filter.getDocIdSet( reader );
-			cache.put( reader, docIdSet );
-			return docIdSet;
+			final DocIdSet docIdSet = filter.getDocIdSet( context, acceptDocs );
+			if ( docIdSet == null ) {
+				cache.put( reader, NULL_OBJECT );
+				return null;
+			}
+			else {
+				cache.put( reader, docIdSet );
+				return docIdSet;
+			}
 		}
 	}
 
-	public String toString() {
-		return this.getClass().getName() + "(" + filter + ")";
+	@Override
+	public String toString(String field) {
+		return "CachingWrapperFilter(" + filter.toString( field ) + ")";
 	}
 
+	@Override
 	public boolean equals(Object o) {
 		if ( !( o instanceof CachingWrapperFilter ) ) {
 			return false;
@@ -110,7 +121,9 @@ public class CachingWrapperFilter extends Filter {
 		return this.filter.equals( ( (CachingWrapperFilter) o ).filter );
 	}
 
+	@Override
 	public int hashCode() {
 		return filter.hashCode() ^ 0x1117BF25;
 	}
+
 }

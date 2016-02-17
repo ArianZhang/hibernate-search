@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 
 package org.hibernate.search.query.dsl.impl;
@@ -43,7 +26,7 @@ import org.apache.lucene.search.PhraseQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 
-import org.hibernate.annotations.common.AssertionFailure;
+import org.hibernate.search.exception.AssertionFailure;
 import org.hibernate.search.query.dsl.PhraseTermination;
 
 /**
@@ -63,6 +46,7 @@ public class ConnectedMultiFieldsPhraseQueryBuilder implements PhraseTermination
 		this.fieldContexts = fieldContexts;
 	}
 
+	@Override
 	public Query createQuery() {
 		final int size = fieldContexts.size();
 		if ( size == 1 ) {
@@ -73,7 +57,7 @@ public class ConnectedMultiFieldsPhraseQueryBuilder implements PhraseTermination
 			for ( FieldContext fieldContext : fieldContexts ) {
 				aggregatedFieldsQuery.add( createQuery( fieldContext ), BooleanClause.Occur.SHOULD );
 			}
-			return  queryCustomizer.setWrappedQuery( aggregatedFieldsQuery ).createQuery();
+			return queryCustomizer.setWrappedQuery( aggregatedFieldsQuery ).createQuery();
 		}
 	}
 
@@ -90,7 +74,7 @@ public class ConnectedMultiFieldsPhraseQueryBuilder implements PhraseTermination
 		final String sentence = phraseContext.getSentence();
 		try {
 			Reader reader = new StringReader( sentence );
-			stream = queryContext.getQueryAnalyzer().reusableTokenStream( fieldName, reader);
+			stream = queryContext.getQueryAnalyzer().tokenStream( fieldName, reader);
 
 			CharTermAttribute termAttribute = stream.addAttribute( CharTermAttribute.class );
 			PositionIncrementAttribute positionAttribute = stream.addAttribute( PositionIncrementAttribute.class );
@@ -109,7 +93,7 @@ public class ConnectedMultiFieldsPhraseQueryBuilder implements PhraseTermination
 					termsAtSamePosition = termsPerPosition.get( position );
 				}
 
-				if (termsAtSamePosition == null) {
+				if ( termsAtSamePosition == null ) {
 					termsAtSamePosition = new ArrayList<Term>();
 					termsPerPosition.put( position, termsAtSamePosition );
 				}
@@ -121,7 +105,7 @@ public class ConnectedMultiFieldsPhraseQueryBuilder implements PhraseTermination
 				}
 			}
 		}
-		catch ( IOException e ) {
+		catch (IOException e) {
 			throw new AssertionFailure( "IOException while reading a string. Doh!", e);
 		}
 		finally {
@@ -130,7 +114,7 @@ public class ConnectedMultiFieldsPhraseQueryBuilder implements PhraseTermination
 					stream.end();
 					stream.close();
 				}
-				catch ( IOException e ) {
+				catch (IOException e) {
 					throw new AssertionFailure( "IOException while reading a string. Doh!", e);
 				}
 			}
@@ -170,7 +154,7 @@ public class ConnectedMultiFieldsPhraseQueryBuilder implements PhraseTermination
 			}
 			else {
 				PhraseQuery query = new PhraseQuery();
-				query.setSlop(  phraseContext.getSlop() );
+				query.setSlop( phraseContext.getSlop() );
 				for ( Map.Entry<Integer,List<Term>> entry : termsPerPosition.entrySet() ) {
 					final List<Term> value = entry.getValue();
 					query.add( value.get( 0 ), entry.getKey() );

@@ -1,22 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.spi;
 
@@ -31,14 +17,15 @@ import org.hibernate.search.backend.spi.Work;
  * Initialization strategies might vary according to the integrating framework;
  * when integrating with Infinispan (as Infinispan Query) no initialization is needed.
  *
- * @see org.hibernate.search.impl.SimpleInitializer
- * @author Sanne Grinovero <sanne@hibernate.org> (C) 2011 Red Hat Inc.
+ * @see org.hibernate.search.engine.impl.SimpleInitializer
+ * @author Sanne Grinovero (C) 2011 Red Hat Inc.
  */
 public interface InstanceInitializer {
 
-	<T> Class<T> getClassFromWork(Work<T> work);
+	Class<?> getClassFromWork(Work work);
 
 	/**
+	 * @param <T> the type of the entity
 	 * @param entity an instance or proxy of T
 	 * @return the class from the instance, or the underlying class from a proxy.
 	 */
@@ -51,12 +38,15 @@ public interface InstanceInitializer {
 	Object unproxy(Object value);
 
 	/**
+	 * @param <T> the type of the elements in the collection
 	 * @param value the collection to initialize
 	 * @return the initialized Collection, to be used on lazily-loading collections
 	 */
 	<T> Collection<T> initializeCollection(Collection<T> value);
 
 	/**
+	 * @param <K> key
+	 * @param <V> value
 	 * @param value the map to initialize
 	 * @return the initialized Map, to be used on lazily-loading maps
 	 */

@@ -1,25 +1,8 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * Copyright (c) 2010, Red Hat, Inc. and/or its affiliates or third-party contributors as
- * indicated by the @author tags or express copyright attribution
- * statements applied by the authors.  All third-party contributions are
- * distributed under license by Red Hat, Inc.
- *
- * This copyrighted material is made available to anyone wishing to use, modify,
- * copy, or redistribute it subject to the terms and conditions of the GNU
- * Lesser General Public License, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this distribution; if not, write to:
- * Free Software Foundation, Inc.
- * 51 Franklin Street, Fifth Floor
- * Boston, MA  02110-1301  USA
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.cfg;
 
@@ -27,10 +10,10 @@ import java.lang.annotation.ElementType;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.apache.solr.analysis.TokenizerFactory;
-
+import org.apache.lucene.analysis.util.TokenizerFactory;
 import org.hibernate.search.annotations.SpatialMode;
 import org.hibernate.search.annotations.Store;
+import org.hibernate.search.bridge.FieldBridge;
 
 /**
  * @author Nicolas Helleringer
@@ -73,13 +56,13 @@ public class EntitySpatialMapping {
 		return this;
 	}
 
-	public EntitySpatialMapping topGridLevel(int topGridLevel) {
-		spatial.put( "topQuadTreeLevel", topGridLevel );
+	public EntitySpatialMapping topSpatialHashLevel(int topSpatialHashLevel) {
+		spatial.put( "topSpatialHashLevel", topSpatialHashLevel );
 		return this;
 	}
 
-	public EntitySpatialMapping bottomGridLevel(int bottomGridLevel) {
-		spatial.put( "bottomQuadTreeLevel", bottomGridLevel );
+	public EntitySpatialMapping bottomSpatialHashLevel(int bottomSpatialHashLevel) {
+		spatial.put( "bottomSpatialHashLevel", bottomSpatialHashLevel );
 		return this;
 	}
 
@@ -103,4 +86,17 @@ public class EntitySpatialMapping {
 		return new ClassBridgeMapping( mapping, entity, impl );
 	}
 
+	/**
+	 * Registers the given class bridge for the currently configured entity type. Any subsequent analyzer, parameter
+	 * etc. configurations apply to this class bridge.
+	 *
+	 * @param instance a class bridge instance
+	 * @return a new {@link ClassBridgeMapping} following the method chaining pattern
+	 * @hsearch.experimental This method is considered experimental and it may be altered or removed in future releases
+	 * @throws org.hibernate.search.exception.SearchException in case the same bridge instance is passed more than once for the
+	 * currently configured entity type
+	 */
+	public ClassBridgeMapping classBridgeInstance(FieldBridge instance) {
+		return new ClassBridgeMapping( mapping, entity, instance );
+	}
 }

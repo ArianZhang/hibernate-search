@@ -1,31 +1,19 @@
 /*
- * Hibernate, Relational Persistence for Idiomatic Java
+ * Hibernate Search, full-text search for your domain model
  *
- * JBoss, Home of Professional Open Source
- * Copyright 2011 Red Hat Inc. and/or its affiliates and other contributors
- * as indicated by the @authors tag. All rights reserved.
- * See the copyright.txt in the distribution for a
- * full listing of individual contributors.
- *
- * This copyrighted material is made available to anyone wishing to use,
- * modify, copy, or redistribute it subject to the terms and conditions
- * of the GNU Lesser General Public License, v. 2.1.
- * This program is distributed in the hope that it will be useful, but WITHOUT A
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public License,
- * v.2.1 along with this distribution; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA  02110-1301, USA.
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.search.indexes.impl;
 
 import java.io.IOException;
 import java.util.Properties;
 
+import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.store.Directory;
-import org.hibernate.search.SearchException;
+import org.hibernate.search.exception.SearchException;
+import org.hibernate.search.indexes.spi.DirectoryBasedIndexManager;
 import org.hibernate.search.indexes.spi.DirectoryBasedReaderProvider;
 import org.hibernate.search.store.DirectoryProvider;
 import org.hibernate.search.util.logging.impl.Log;
@@ -45,14 +33,14 @@ public class NotSharedReaderProvider implements DirectoryBasedReaderProvider {
 	private String indexName;
 
 	@Override
-	public IndexReader openIndexReader() {
+	public DirectoryReader openIndexReader() {
 		// #getDirectory must be invoked each time as the underlying directory might "dance" as in
 		// org.hibernate.search.store.impl.FSSlaveDirectoryProvider
 		Directory directory = directoryProvider.getDirectory();
 		try {
-			return IndexReader.open( directory );
+			return DirectoryReader.open( directory );
 		}
-		catch ( IOException e ) {
+		catch (IOException e) {
 			throw new SearchException( "Could not open index \"" + indexName + "\"", e );
 		}
 	}
@@ -62,7 +50,7 @@ public class NotSharedReaderProvider implements DirectoryBasedReaderProvider {
 		try {
 			reader.close();
 		}
-		catch ( IOException e ) {
+		catch (IOException e) {
 			log.unableToCloseLuceneIndexReader( e );
 		}
 	}
